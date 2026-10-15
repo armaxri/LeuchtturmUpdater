@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/armaxri/LeuchtturmUpdater/schemas/script-protocol.schema.json",
+  "title": "Leuchtturm Updater script source protocol, version 1",
+  "description": "What a `script` source prints to stdout. Each action has its own response; any action may instead return an error response (with exit code 1). See docs/sources/script.md.",
+  "$defs": {
+    "protocol": {
+      "description": "Protocol version. Always 1.",
+      "const": 1
+    },
+    "semver": {
+      "type": "string",
+      "description": "a semver version such as 1.4.1 or 2.0.0-beta.1",
+      "pattern": "^v?(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+    },
+    "ref": {
+      "type": "object",
+      "description": "Opaque values passed back on download as ${ref.<key>} and LEUCHTTURM_REF_<KEY>.",
+      "additionalProperties": { "type": "string" }
+    },
+    "version": {
+      "type": "object",
+      "required": ["version"],
+      "additionalProperties": false,
+      "properties": {
+        "version": { "$ref": "#/$defs/semver" },
+        "releaseNotes": { "type": "string", "description": "Markdown or plain text." },
+        "releaseNotesUrl": { "type": "string" },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{64}$",
+          "description": "the hex SHA-256 of the .vsix (64 characters)"
+        },
+        "ref": { "$ref": "#/$defs/ref" }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "required": ["id", "versions"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[^.\\s]+\\.[^.\\s]+$",
+          "description": "publisher.name"
+        },
+        "displayName": { "type": "string" },
+        "kind": { "enum": ["vscode-extension"] },
+        "versions": { "type": "array", "items": { "$ref": "#/$defs/version" } }
+      }
+    },
+    "list": {
+      "description": "Response to the `list` action (get_versions).",
+      "type": "object",
+      "required": ["protocol", "artifacts"],
+      "additionalProperties": false,
+      "properties": {
+        "protocol": { "$ref": "#/$defs/protocol" },
+        "artifacts": { "type": "array", "items": { "$ref": "#/$defs/artifact" } }
+      }
+    },
+    "download": {
+      "description": "Response to the `download` action (download_version): a local path, or a URL that Leuchtturm downloads.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["protocol", "path"],
+          "additionalProperties": false,
+          "properties": {
+            "protocol": { "$ref": "#/$defs/protocol" },
+            "path": { "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["protocol", "url"],
+          "additionalProperties": false,
+          "properties": {
+            "protocol": { "$ref": "#/$defs/protocol" },
+            "url": {
+              "type": "string",
+              "pattern": "^https?://",
+              "description": "an http:// or https:// URL"
+            },
+            "headers": { "type": "object", "additionalProperties": { "type": "string" } }
+          }
+        }
+      ]
+    },
+    "notes": {
+      "description": "Response to the optional `notes` action (get_release_notes). Exit with code 3 if not supported.",
+      "type": "object",
+      "required": ["protocol", "markdown"],
+      "additionalProperties": false,
+      "properties": {
+        "protocol": { "$ref": "#/$defs/protocol" },
+        "markdown": { "type": "string" }
+      }
+    },
+    "error": {
+      "description": "Error response, allowed for every action (with exit code 1).",
+      "type": "object",
+      "required": ["protocol", "error"],
+      "additionalProperties": false,
+      "properties": {
+        "protocol": { "$ref": "#/$defs/protocol" },
+        "error": { "type": "string", "minLength": 1 },
+        "detail": { "type": "string" }
+      }
+    }
+  }
+}

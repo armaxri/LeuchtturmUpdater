@@ -22,6 +22,10 @@
  *   npm registry (token from the scenario's own .npmrc, scope search)
  *     @leuchtturm-demo/registry 3.0.0 ← pre-installed, 3.1.0 ("vscodeExtension" field)
  *     @leuchtturm-demo/packed 0.9.0               → ID derived from the .vsix inside
+ *
+ * And a `script` source running examples/script/folder_source.py on script-share/
+ * (leuchtturm-demo.scripted 1.0.0, 1.1.0). `leuchtturm.script.enabled` starts out false in the
+ * user settings (the workspace sets it to true, which must be ignored).
  */
 
 import { createHash } from 'node:crypto';
@@ -31,6 +35,7 @@ import * as path from 'node:path';
 import { startFakeServer, type FakeServer } from './fakeServer';
 import { packageFixture, ROOT } from './packageFixture';
 import { TLS_CERT } from './paths';
+import { findPython } from './python';
 import { makeTgz } from './tarball';
 
 const DEMO = path.join(ROOT, 'test/fixtures/demo-extension');
@@ -44,6 +49,7 @@ export const IDS = {
   web: 'leuchtturm-demo.web',
   registry: 'leuchtturm-demo.registry',
   packed: 'leuchtturm-demo.packed',
+  scripted: 'leuchtturm-demo.scripted',
 } as const;
 
 /** Token the fake npm registry expects; the scenario writes it into its own `.npmrc`. */
@@ -63,6 +69,8 @@ export interface Scenario {
   jenkinsUrl: string;
   webUrl: string;
   npmUrl: string;
+  /** Python used by the `script` source; undefined if none was found (source omitted). */
+  python?: string;
   /** Stops the fake servers. */
   close(): Promise<void>;
 }
@@ -148,6 +156,16 @@ export async function buildScenario(
   await demo('ci', 'Leuchtturm Demo CI', '2.1.0', ci('2.1.0'));
   const webDir = path.join(root, 'web');
   await demo('web', 'Leuchtturm Demo Web', '0.3.0', path.join(webDir, `${IDS.web}-0.3.0.vsix`));
+
+  const scriptShare = path.join(root, 'script-share');
+  const scripted = (v: string) => path.join(scriptShare, `${IDS.scripted}-${v}.vsix`);
+  await demo('scripted', 'Leuchtturm Demo Scripted', '1.0.0', scripted('1.0.0'));
+  await demo('scripted', 'Leuchtturm Demo Scripted', '1.1.0', scripted('1.1.0'));
+  await fs.writeFile(
+    path.join(scriptShare, `${IDS.scripted}-1.1.0.md`),
+    '## 1.1.0\n- Listed by examples/script/folder_source.py\n',
+  );
+  const python = findPython();
 
   // npm packages wrap a .vsix, like `npm pack` would produce from examples/npm.
   const npmVsix = (name: string, display: string, v: string) =>
@@ -266,7 +284,20 @@ export async function buildScenario(
         scope: '@leuchtturm-demo',
         npmrc,
       },
+      ...(python
+        ? {
+            script: {
+              type: 'script',
+              command: python,
+              script: path.join(ROOT, 'examples/script/folder_source.py'),
+              env: { VSIX_FOLDER: scriptShare },
+              timeout: 30,
+            },
+          }
+        : {}),
     },
+    // Off until the user turns it on in their user settings (the workspace value is ignored).
+    'leuchtturm.script.enabled': false,
     'leuchtturm.trackAllFromSources': true,
     'leuchtturm.checkOnStartup': true,
     'leuchtturm.checkInterval': 5,
@@ -297,6 +328,7 @@ export async function buildScenario(
     jenkinsUrl: jenkins.url,
     webUrl: web.url,
     npmUrl: `${npm.url}/npm/`,
+    python,
     close: async () => {
       await Promise.all(servers.map((s) => s.close()));
     },

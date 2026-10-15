@@ -6,8 +6,18 @@
 
 import * as vscode from 'vscode';
 
-import { artifactLabel as label, type ArtifactState, type CheckState } from '../checker';
+import {
+  artifactLabel as label,
+  type ArtifactState,
+  type Candidate,
+  type CheckState,
+} from '../checker';
 import { buildTree, findArtifactNodes, GROUPS, KIND_LABELS, nodeId, type Node } from './treeModel';
+
+function hasNotes(c: Candidate): boolean {
+  const v = c.available;
+  return Boolean(v.releaseNotes || v.releaseNotesUrl || v.releaseNotesOnDemand);
+}
 
 function themeIcon(id: string, color?: string): vscode.ThemeIcon {
   return new vscode.ThemeIcon(id, color ? new vscode.ThemeColor(color) : undefined);
@@ -120,7 +130,7 @@ export class LeuchtturmTreeProvider implements vscode.TreeDataProvider<Node> {
             break;
         }
         item.tooltip = tooltip(a, this.state);
-        item.contextValue = `artifact.${a.status}${a.latest?.available.releaseNotes || a.latest?.available.releaseNotesUrl ? '.notes' : ''}`;
+        item.contextValue = `artifact.${a.status}${a.latest && hasNotes(a.latest) ? '.notes' : ''}`;
         return item;
       }
       case 'version': {
@@ -141,16 +151,19 @@ export class LeuchtturmTreeProvider implements vscode.TreeDataProvider<Node> {
         );
         item.tooltip = `${artifact.id} ${candidate.version} from ${candidate.sourceName} (${candidate.sourceType})`;
         const installed = candidate.version === artifact.installedVersion;
-        item.contextValue = `version${installed ? '.installed' : ''}${candidate.available.releaseNotes || candidate.available.releaseNotesUrl ? '.notes' : ''}`;
+        item.contextValue = `version${installed ? '.installed' : ''}${hasNotes(candidate) ? '.notes' : ''}`;
         return item;
       }
       case 'problem': {
         const item = new vscode.TreeItem(node.problem.message, C.None);
         item.id = nodeId(node);
         item.iconPath = themeIcon('warning', 'problemsWarningIcon.foreground');
-        item.tooltip = `${node.problem.message}\n\nClick to open the log.`;
+        const action = node.problem.action;
+        item.tooltip = `${node.problem.message}\n\nClick to ${action ? action.title.replace(/…$/, '').toLowerCase() : 'open the log'}.`;
         item.contextValue = 'problem';
-        item.command = { command: 'leuchtturm.showLog', title: 'Show Log' };
+        item.command = action
+          ? { command: action.command, title: action.title, arguments: action.arguments }
+          : { command: 'leuchtturm.showLog', title: 'Show Log' };
         return item;
       }
     }

@@ -27,6 +27,7 @@ const SKIPPED = 'leuchtturm.skipped';
 const CACHE = 'leuchtturm.cache';
 const CHECK_LEASE = 'leuchtturm.checkLease';
 const INSTALL_LEASES = 'leuchtturm.installLeases';
+const APPROVED_SCRIPTS = 'leuchtturm.approvedScripts';
 
 /** "Window `owner` holds this until `until` (epoch ms)." Expired leases are free to take. */
 export interface Lease {
@@ -83,6 +84,18 @@ export class StateStore {
 
   async clearSkipped(): Promise<void> {
     await this.memento.update(SKIPPED, undefined);
+  }
+
+  /** Script approvals, by fingerprint of command + script path (SPEC §6.5). */
+  isScriptApproved(fingerprint: string): boolean {
+    return (this.memento.get<string[]>(APPROVED_SCRIPTS) ?? []).includes(fingerprint);
+  }
+
+  async approveScript(fingerprint: string): Promise<void> {
+    const list = this.memento.get<string[]>(APPROVED_SCRIPTS) ?? [];
+    if (!list.includes(fingerprint)) {
+      await this.memento.update(APPROVED_SCRIPTS, [...list, fingerprint]);
+    }
   }
 
   get cache(): CachedCheck | undefined {

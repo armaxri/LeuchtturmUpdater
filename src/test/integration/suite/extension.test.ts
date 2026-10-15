@@ -18,6 +18,16 @@ function find(state: CheckState | undefined, id: string) {
   return state?.artifacts.find((a) => a.id === id);
 }
 
+function problem(state: CheckState | undefined, source: string) {
+  return state?.problems.find((p) => p.source === source);
+}
+
+async function setScriptsEnabled(enabled: boolean): Promise<void> {
+  await vscode.workspace
+    .getConfiguration('leuchtturm')
+    .update('script.enabled', enabled, vscode.ConfigurationTarget.Global);
+}
+
 function describeTree(nodes: readonly Node[]): unknown[] {
   return nodes.map((n) => {
     switch (n.type) {
@@ -123,10 +133,10 @@ describe('Leuchtturm end to end (demo scenario, file source)', () => {
   it('reports a missing credential and an offline source without affecting the others', () => {
     assert.deepEqual(
       state?.problems.map((p) => p.source),
-      ['jenkins', 'offline'],
+      ['jenkins', 'script', 'offline'],
     );
-    assert.match(state?.problems[0]?.message ?? '', /Secret "jenkins-demo" is not stored/);
-    assert.match(state?.problems[1]?.message ?? '', /Folder not found/);
+    assert.match(problem(state, 'jenkins')?.message ?? '', /Secret "jenkins-demo" is not stored/);
+    assert.match(problem(state, 'offline')?.message ?? '', /Folder not found/);
     // The pre-installed CI demo is only offered by Jenkins, so it is not listed yet.
     assert.equal(find(state, IDS.ci), undefined);
   });
@@ -155,7 +165,7 @@ describe('Leuchtturm end to end (demo scenario, file source)', () => {
           { [IDS.world]: ['0.5.0'] },
         ],
       },
-      { 'problems (2)': state?.problems.map((p) => p.message) },
+      { 'problems (3)': state?.problems.map((p) => p.message) },
     ]);
     assert.equal(a.badge, 2);
     assert.equal(a.statusBar?.visible, true);
@@ -208,7 +218,7 @@ describe('Leuchtturm end to end (demo scenario, file source)', () => {
     assert.equal(ci?.latest?.available.ref.number, '42');
     assert.deepEqual(
       a.state?.problems.map((p) => p.source),
-      ['offline'],
+      ['script', 'offline'],
     );
     assert.equal(a.badge, 3);
 
@@ -239,6 +249,59 @@ describe('Leuchtturm end to end (demo scenario, file source)', () => {
     );
     assert.ok(doc, 'release notes document not opened');
     assert.match(doc.getText(), /^# Leuchtturm Demo CI 2\.1\.0/);
+  });
+
+  it('keeps script sources off until the user setting enables them (workspace value ignored)', async () => {
+    const p = problem(state, 'script');
+    assert.match(p?.message ?? '', /Script sources are disabled/);
+    assert.equal(p?.action?.command, 'workbench.action.openGlobalSettings');
+    assert.equal(find(state, IDS.scripted), undefined);
+    // The fix must be a real command that accepts these arguments (opens the user settings).
+    await vscode.commands.executeCommand(p.action.command, ...(p.action.arguments ?? []));
+    await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+  });
+
+  it('runs a Python script source after the user enables and approves it', async () => {
+    const a = await api();
+    await setScriptsEnabled(true);
+    let s = await a.checkNow();
+    // Enabled, but this command + script has not been approved yet.
+    const waiting = problem(s, 'script');
+    assert.match(waiting?.message ?? '', /Waiting for your approval to run ".*folder_source\.py"/);
+    assert.equal(waiting?.action?.command, 'leuchtturm.approveScript');
+    assert.equal(find(s, IDS.scripted), undefined);
+
+    assert.equal(
+      await vscode.commands.executeCommand('leuchtturm.approveScript', 'script', true),
+      true,
+    );
+    s = a.state;
+    assert.equal(problem(s, 'script'), undefined);
+    const scripted = find(s, IDS.scripted);
+    assert.equal(scripted?.status, 'not-installed');
+    assert.equal(scripted?.latest?.sourceType, 'script');
+    assert.deepEqual(
+      scripted?.candidates.map((c) => c.version),
+      ['1.1.0', '1.0.0'],
+    );
+    assert.match(scripted?.latest?.available.releaseNotes ?? '', /folder_source\.py/);
+    assert.match(scripted?.latest?.available.sha256 ?? '', /^[0-9a-f]{64}$/);
+
+    const report = await vscode.commands.executeCommand<string>('leuchtturm.testSource', 'script');
+    assert.match(report, /\$ ".*" ".*folder_source\.py" "get_versions"/);
+    assert.match(report, /stderr: found 2 file\(s\)/);
+    assert.match(report, /exit code 0/);
+
+    const node = findNode(a.treeModel, IDS.scripted);
+    assert.ok(node);
+    assert.equal(await vscode.commands.executeCommand<number>('leuchtturm.tree.update', node), 1);
+    assert.ok((await installedFolders()).some((f) => f.startsWith(`${IDS.scripted}-1.1.0`)));
+  });
+
+  it('stops running scripts as soon as the setting is turned off again', async () => {
+    await setScriptsEnabled(false);
+    const s = await (await api()).checkNow();
+    assert.match(problem(s, 'script')?.message ?? '', /Script sources are disabled/);
   });
 
   it('refuses to install a VSIX whose SHA-256 does not match', async () => {

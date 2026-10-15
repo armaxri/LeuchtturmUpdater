@@ -9,19 +9,22 @@
 import { parseFileSource, type FileSourceConfig } from './sources/fileConfig';
 import { parseHttpSource, type HttpSourceConfig } from './sources/httpConfig';
 import { parseNpmSource, type NpmSourceConfig } from './sources/npmConfig';
+import { parseScriptSource, type ScriptSourceConfig } from './sources/scriptConfig';
+import { OPEN_SCRIPT_SETTING, SCRIPTS_DISABLED_MESSAGE } from './sources/scriptSource';
 import {
   isObject,
   SourceConfigError,
   stringList,
   type CommonSourceConfig,
 } from './sources/sourceConfig';
-import { SOURCE_TYPES, type SourceType } from './sources/types';
+import { SOURCE_TYPES, type ProblemAction, type SourceType } from './sources/types';
 import { findSecretNames, TemplateError, type TemplateContext } from './util/template';
 import { parseRange, type Range } from './version';
 
 export { DEFAULT_FILE_PATTERN, type FileSourceConfig } from './sources/fileConfig';
 export type { HttpSourceConfig } from './sources/httpConfig';
 export type { NpmSourceConfig } from './sources/npmConfig';
+export type { ScriptSourceConfig } from './sources/scriptConfig';
 
 export type StatusBarMode = 'always' | 'whenUpdates' | 'never';
 
@@ -41,7 +44,8 @@ export interface Settings {
 }
 
 /** Union of all implemented source configs. Grows with each milestone. */
-export type SourceConfig = FileSourceConfig | HttpSourceConfig | NpmSourceConfig;
+export type SourceConfig =
+  FileSourceConfig | HttpSourceConfig | NpmSourceConfig | ScriptSourceConfig;
 
 export interface TrackingEntry {
   id: string;
@@ -56,6 +60,18 @@ export interface ConfigProblem {
   /** The source the problem belongs to, if any. */
   source?: string;
   message: string;
+  /** A command that fixes it, shown on the problem node. */
+  action?: ProblemAction;
+}
+
+/** Raised for sources that are valid but must not run (script gate off). */
+class SourceBlockedError extends Error {
+  constructor(
+    message: string,
+    readonly action: ProblemAction,
+  ) {
+    super(message);
+  }
 }
 
 export interface Config {
@@ -98,7 +114,12 @@ export function parseSettings(get: RawSettings): Settings {
   };
 }
 
-function parseSource(name: string, raw: unknown, ctx: TemplateContext): SourceConfig | 'disabled' {
+function parseSource(
+  name: string,
+  raw: unknown,
+  ctx: TemplateContext,
+  settings: Settings,
+): SourceConfig | 'disabled' {
   if (!isObject(raw)) {
     throw new SourceConfigError('must be an object');
   }
@@ -128,6 +149,15 @@ function parseSource(name: string, raw: unknown, ctx: TemplateContext): SourceCo
       return parseHttpSource(common, raw, ctx);
     case 'npm':
       return parseNpmSource(common, raw, ctx);
+    case 'script': {
+      const config = parseScriptSource(common, raw, ctx);
+      // Only the user-level value counts (see vscodeSettings.ts). Never create the source
+      // otherwise, so nothing can spawn it.
+      if (!settings.scriptEnabled) {
+        throw new SourceBlockedError(SCRIPTS_DISABLED_MESSAGE, OPEN_SCRIPT_SETTING);
+      }
+      return config;
+    }
     default:
       throw new SourceConfigError(
         `source type "${type}" is not supported by this version of Leuchtturm yet`,
@@ -198,12 +228,14 @@ export function parseConfig(get: RawSettings, ctx: TemplateContext = {}): Config
   } else {
     for (const [name, raw] of Object.entries(rawSources)) {
       try {
-        const parsed = parseSource(name, raw, ctx);
+        const parsed = parseSource(name, raw, ctx, settings);
         if (parsed !== 'disabled') {
           sources.push(parsed);
         }
       } catch (err) {
-        if (err instanceof SourceConfigError || err instanceof TemplateError) {
+        if (err instanceof SourceBlockedError) {
+          problems.push({ source: name, message: `${name}: ${err.message}`, action: err.action });
+        } else if (err instanceof SourceConfigError || err instanceof TemplateError) {
           problems.push({ source: name, message: `Invalid source "${name}": ${err.message}` });
         } else {
           throw err;

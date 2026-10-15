@@ -57,6 +57,9 @@ async function main(): Promise<void> {
 
   /* eslint-disable no-console */
   console.log(`\nSandbox ready in ${scenario.root}`);
+  if (!scenario.python) {
+    console.log('No Python ≥ 3.8 found: the script source demo is left out.');
+  }
   if (!launch) {
     await scenario.close();
     return;

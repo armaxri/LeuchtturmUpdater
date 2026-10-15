@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.5.0 (unreleased)
+
+Milestone M5: script sources.
+
+- `script` source: runs your program with templated arguments (no shell) and reads one JSON
+  document per action (`list`, `download` by path or URL, optional `notes`, error responses).
+  Context in `LEUCHTTURM_*` environment variables, `ref` values passed back on download.
+- Off unless `leuchtturm.script.enabled` is true in the user settings (re-checked before every
+  run); each program is approved once per command and script path (_Allow Script Source…_).
+- Timeouts and cancellation kill the whole process tree.
+- Responses are validated against the shipped `schemas/script-protocol.schema.json` with
+  precise error messages.
+- Problems can carry a fix: clicking one opens the right setting or the approval dialog.
+- Python examples (standard library, 3.8+) with a helper module, all exercised by tests.
+- Docs: `docs/sources/script.md` (protocol reference), `docs/security.md`,
+  `examples/script/`, `examples/settings/script.jsonc`.
+
 ## 0.4.0 (unreleased)
 
 Milestone M4: npm registries.

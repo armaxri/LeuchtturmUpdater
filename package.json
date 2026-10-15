@@ -2,7 +2,7 @@
   "name": "leuchtturm-updater",
   "displayName": "Leuchtturm Updater",
   "description": "Keeps privately distributed VS Code extensions up to date from file shares, npm registries, Jenkins or custom scripts.",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "publisher": "armaxri",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -65,6 +65,12 @@
         "title": "Store Credential…",
         "category": "Leuchtturm",
         "icon": "$(key)"
+      },
+      {
+        "command": "leuchtturm.approveScript",
+        "title": "Allow Script Source…",
+        "category": "Leuchtturm",
+        "icon": "$(shield)"
       },
       {
         "command": "leuchtturm.clearSkipped",
@@ -171,7 +177,7 @@
               "timeout": {
                 "type": "number",
                 "minimum": 1,
-                "description": "Timeout in seconds for listing this source."
+                "description": "Timeout in seconds for listing this source (script: for each run)."
               },
               "include": {
                 "type": "array",
@@ -355,6 +361,71 @@
                 "type": "string",
                 "default": "~/.npmrc",
                 "description": "(npm) .npmrc to read credentials from when \"auth\" is not set."
+              },
+              "command": {
+                "type": "string",
+                "description": "(script) Executable, e.g. \"python3\" (on Windows \"py\" or \"python\"). No shell is used."
+              },
+              "script": {
+                "type": "string",
+                "description": "(script) Script file, passed as the first argument. Supports ~."
+              },
+              "cwd": {
+                "type": "string",
+                "description": "(script) Working directory."
+              },
+              "env": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "description": "(script) Extra environment variables (templated)."
+              },
+              "args": {
+                "type": "object",
+                "description": "(script) Argument templates per action.",
+                "properties": {
+                  "list": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "default": [
+                      "get_versions"
+                    ]
+                  },
+                  "download": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "default": [
+                      "download_version",
+                      "--id",
+                      "${id}",
+                      "--version",
+                      "${version}",
+                      "--target-dir",
+                      "${targetDir}"
+                    ]
+                  },
+                  "notes": {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "string"
+                    },
+                    "default": [
+                      "get_release_notes",
+                      "--id",
+                      "${id}",
+                      "--version",
+                      "${version}"
+                    ]
+                  }
+                }
               }
             }
           }
@@ -408,13 +479,13 @@
           "type": "number",
           "default": 120,
           "minimum": 1,
-          "description": "Default script timeout in seconds."
+          "description": "Default timeout in seconds for one script run."
         },
         "leuchtturm.script.enabled": {
           "type": "boolean",
           "default": false,
           "scope": "machine",
-          "markdownDescription": "Allow `script` sources to run. Only the **user settings** value counts."
+          "markdownDescription": "Allow `script` sources to run programs. Only the value in your **user settings** counts; workspace settings cannot turn this on. Each script also needs a one-time approval."
         }
       }
     },
@@ -485,6 +556,11 @@
           "command": "leuchtturm.setSecret",
           "when": "view == leuchtturm.updates",
           "group": "more@3"
+        },
+        {
+          "command": "leuchtturm.approveScript",
+          "when": "view == leuchtturm.updates && config.leuchtturm.script.enabled",
+          "group": "more@4"
         }
       ],
       "view/item/context": [

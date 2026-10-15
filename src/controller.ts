@@ -14,10 +14,12 @@ import {
   type SourceEntry,
   type SourceResult,
 } from './checker';
-import { parseConfig, referencedSecrets, type Config } from './config';
+import { parseConfig, parseSettings, referencedSecrets, type Config } from './config';
 import type { Installer } from './installer';
 import { errorMessage, type RedactingLogger } from './log';
 import { createSource } from './sources';
+import { ScriptSource, type ScriptGate } from './sources/scriptSource';
+import type { JsonSchema } from './util/jsonSchema';
 import { secretStorageKey, type CachedCheck, type StateStore } from './state';
 import type { Target } from './targets/types';
 import { notifyUpdates, promptReload } from './ui/notifications';
@@ -57,13 +59,35 @@ export class Controller implements vscode.Disposable {
   /** Fires `true` when a check starts and `false` when it ends. */
   readonly onDidChangeChecking = this.checkingEmitter.event;
 
+  /** Script approvals already requested in this session (one prompt per fingerprint). */
+  private readonly approvalPrompts = new Set<string>();
+
   constructor(
     private readonly secrets: vscode.SecretStorage,
     private readonly log: RedactingLogger,
     private readonly target: Target,
     private readonly store: StateStore,
     private readonly installer: Installer,
+    private readonly scriptInfo: { schema: JsonSchema; hostVersion: string },
   ) {}
+
+  /** Decides whether script sources may run. Re-read from the settings on every spawn. */
+  private readonly scriptGate: ScriptGate = {
+    enabled: () => parseSettings(readRawSettings()).scriptEnabled,
+    isApproved: (fingerprint) => this.store.isScriptApproved(fingerprint),
+    requestApproval: (sourceName, fingerprint, commandLine) => {
+      if (this.approvalPrompts.has(fingerprint)) {
+        return;
+      }
+      this.approvalPrompts.add(fingerprint);
+      void vscode.window
+        .showWarningMessage(
+          `Leuchtturm: source "${sourceName}" wants to run "${commandLine}". Allow it only if you trust this program.`,
+          'Review and Allow…',
+        )
+        .then((choice) => choice && this.approveScript(sourceName));
+    },
+  };
 
   get state(): CheckState | undefined {
     return this.current;
@@ -111,7 +135,10 @@ export class Controller implements vscode.Disposable {
     for (const p of config.problems) {
       this.log.warn(p.message);
     }
-    const defaultTimeoutMs = config.settings.httpTimeoutSeconds * 1000;
+    const defaultTimeoutMs = (type: string) =>
+      (type === 'script'
+        ? config.settings.scriptTimeoutSeconds
+        : config.settings.httpTimeoutSeconds) * 1000;
     for (const c of config.sources) {
       if (c.type === 'http' || c.type === 'npm') {
         c.sensitiveValues.forEach((v) => this.log.redactor.add(v));
@@ -122,10 +149,11 @@ export class Controller implements vscode.Disposable {
         c.name,
         {
           source: createSource(c, this.log, {
-            timeoutMs: defaultTimeoutMs,
+            timeoutMs: defaultTimeoutMs(c.type),
             addSecret: (v) => this.log.redactor.add(v),
+            script: { gate: this.scriptGate, ...this.scriptInfo },
           }),
-          timeoutMs: c.timeoutSeconds ? c.timeoutSeconds * 1000 : defaultTimeoutMs,
+          timeoutMs: c.timeoutSeconds ? c.timeoutSeconds * 1000 : defaultTimeoutMs(c.type),
           include: c.include,
           exclude: c.exclude,
         },
@@ -496,7 +524,8 @@ export class Controller implements vscode.Disposable {
     let releaseNotes = candidate.available.releaseNotes;
     const name = label(this.findArtifact(candidate.artifact.id) ?? candidate.artifact);
     const source = this.sources.get(candidate.sourceName)?.source;
-    if (!releaseNotes && releaseNotesUrl && source?.fetchReleaseNotes) {
+    const canFetch = releaseNotesUrl || candidate.available.releaseNotesOnDemand;
+    if (!releaseNotes && canFetch && source?.fetchReleaseNotes) {
       try {
         releaseNotes = await source.fetchReleaseNotes(
           candidate.artifact,
@@ -504,7 +533,7 @@ export class Controller implements vscode.Disposable {
           NEVER_CANCELLED,
         );
       } catch (err) {
-        this.log.warn(`Release notes from ${releaseNotesUrl}: ${errorMessage(err)}`);
+        this.log.warn(`Release notes for ${name} ${candidate.version}: ${errorMessage(err)}`);
       }
     }
     if (releaseNotes) {
@@ -520,6 +549,64 @@ export class Controller implements vscode.Disposable {
         `Leuchtturm: no release notes for ${name} ${candidate.version}.`,
       );
     }
+  }
+
+  /**
+   * Lets the user approve running a script source's program (SPEC §6.5). Shows a modal with
+   * the exact command; `confirmed` skips it (integration tests only drive commands).
+   */
+  async approveScript(name?: string, confirmed = false): Promise<boolean> {
+    await this.loadConfig();
+    const scripts = [...this.sources.values()]
+      .map((e) => e.source)
+      .filter((s): s is ScriptSource => s instanceof ScriptSource);
+    if (!name) {
+      if (scripts.length === 0) {
+        void vscode.window.showInformationMessage(
+          this.config?.settings.scriptEnabled
+            ? 'Leuchtturm: no script sources are configured.'
+            : 'Leuchtturm: script sources are disabled ("leuchtturm.script.enabled").',
+        );
+        return false;
+      }
+      name = (
+        await vscode.window.showQuickPick(
+          scripts.map((s) => ({
+            label: s.name,
+            description: s.commandLine,
+            detail: this.store.isScriptApproved(s.fingerprint) ? 'allowed' : 'not allowed yet',
+          })),
+          { title: 'Leuchtturm: Allow Script Source', placeHolder: 'Which script source?' },
+        )
+      )?.label;
+      if (!name) {
+        return false;
+      }
+    }
+    const source = scripts.find((s) => s.name === name);
+    if (!source) {
+      void vscode.window.showErrorMessage(`Leuchtturm: "${name}" is not an enabled script source.`);
+      return false;
+    }
+    if (!confirmed) {
+      const ok = await vscode.window.showWarningMessage(
+        `Allow Leuchtturm to run "${source.commandLine}"?`,
+        {
+          modal: true,
+          detail:
+            `Source "${name}" runs this program whenever Leuchtturm checks for or installs updates. ` +
+            'Allow it only if you trust it. Changing the command or script path asks again.',
+        },
+        'Allow',
+      );
+      if (ok !== 'Allow') {
+        return false;
+      }
+    }
+    await this.store.approveScript(source.fingerprint);
+    this.log.info(`Approved script source "${name}": ${source.commandLine}`);
+    await this.check({ manual: false, sources: [name] });
+    return true;
   }
 
   /**

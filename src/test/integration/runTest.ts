@@ -29,6 +29,11 @@ async function main(): Promise<void> {
       'leuchtturm.checkInterval': 0,
       'leuchtturm.notify': false,
     });
+    if (!scenario.python) {
+      throw new Error(
+        'The integration tests need Python ≥ 3.8 (python3, python or py) on the PATH',
+      );
+    }
     const profile = [
       '--user-data-dir',
       scenario.userDataDir,

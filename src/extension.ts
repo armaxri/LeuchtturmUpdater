@@ -4,6 +4,7 @@
  * is disposed automatically.
  */
 
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 
@@ -18,6 +19,7 @@ import { StatusBar } from './ui/statusBar';
 import type { StatusBarView } from './ui/statusBarModel';
 import { updateCount, type Node } from './ui/treeModel';
 import { LeuchtturmTreeProvider } from './ui/treeView';
+import type { JsonSchema } from './util/jsonSchema';
 import { Redactor } from './util/redact';
 import { SECTION } from './vscodeSettings';
 
@@ -52,7 +54,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<Leucht
       release: (id) => store.releaseInstall(id, windowId),
     },
   );
-  const controller = new Controller(context.secrets, log, target, store, installer);
+  // Shipped with the extension (schemas/), so scripts and Leuchtturm validate against one file.
+  const schema = JSON.parse(
+    fs.readFileSync(
+      path.join(context.extensionPath, 'schemas', 'script-protocol.schema.json'),
+      'utf8',
+    ),
+  ) as JsonSchema;
+  const controller = new Controller(context.secrets, log, target, store, installer, {
+    schema,
+    hostVersion: vscode.version,
+  });
 
   // --- UI -------------------------------------------------------------------------------
   const tree = new LeuchtturmTreeProvider();
@@ -156,6 +168,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<Leucht
     command('leuchtturm.testSource', (name?: string) => controller.testSource(name)),
     command('leuchtturm.setSecret', (name?: string, value?: string) =>
       controller.setSecret(name, value),
+    ),
+    command('leuchtturm.approveScript', (name?: string, confirmed?: boolean) =>
+      controller.approveScript(name, confirmed === true),
     ),
     command('leuchtturm.openSettings', () =>
       vscode.commands.executeCommand(

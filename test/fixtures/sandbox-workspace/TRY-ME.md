@@ -17,6 +17,7 @@ inside the repository and is rebuilt on every `npm run sandbox`.
 | Leuchtturm Demo Web | fake **web server listing** over HTTPS (`web` source, custom CA): 0.3.0 | no | Can be installed. |
 | Leuchtturm Demo Registry | fake **npm registry** (`npm` source, token from `.sandbox/npmrc`): 3.0.0, 3.1.0 | 3.0.0 | Update to 3.1.0. |
 | Leuchtturm Demo Packed | fake **npm registry**, package without `vscodeExtension`: 0.9.0 | no | ID read from the `.vsix` inside. Can be installed. |
+| Leuchtturm Demo Scripted | **script source** running `examples/script/folder_source.py` (needs Python ≥ 3.8): 1.0.0, 1.1.0 | no | Appears after you enable scripts and approve the program. |
 
 The user settings also contain a source called `offline` that points to a folder that does
 not exist, so a problem shows up.
@@ -32,9 +33,11 @@ Steps marked 🤖 are also covered by the integration tests; the others need eye
 a modal dialog.
 
 1. Open the **Leuchtturm** view in the activity bar (lighthouse icon). You should see
-   _Updates available (2)_, _Available, not installed (4)_ and _Problems (2)_, a badge `2` on
+   _Updates available (2)_, _Available, not installed (4)_ and _Problems (3)_, a badge `2` on
    the icon and `$(broadcast) 2` on the left of the status bar. 🤖 One problem says
-   _Secret "jenkins-demo" is not stored_.
+   _Secret "jenkins-demo" is not stored_, another _Script sources are disabled_ (even though
+   this workspace's `.vscode/settings.json` sets `leuchtturm.script.enabled` to `true`: only
+   your user settings count). 🤖
 2. Run **Leuchtturm: Store Credential…** (also in the view's `…` menu), pick `jenkins-demo`
    and enter `demo-password`. _Leuchtturm Demo CI 2.0.0 → 2.1.0_ appears under updates and
    the badge shows `3`. 🤖 Click the book icon on it: the release notes are fetched from
@@ -60,12 +63,20 @@ a modal dialog.
     `jenkins` (HTTP status, start of the JSON body, every match and its download URL), `npm`
     (scope search, version → ID mapping, tarball URLs) and `offline` too. 🤖 Passwords and
     tokens never appear in the log.
-11. Click a problem node: it opens the log. Debug logging is on.
+11. Click the `offline` problem: it opens the log (debug logging is on). Problems with a fix,
+    such as the disabled scripts, run that fix instead.
 12. Multi-window: open **File → New Window**. The new window shows the same tree right away
     without checking itself; only one window checks (see "Another window leads update
     checks" in its log). Close the first window: within about three minutes the second one
     takes over.
 13. Edit `leuchtturm.sources` in the user settings (for example remove `offline`): the tree
     updates within a second.
-14. Stop `npm run sandbox` with Ctrl+C and run **Leuchtturm: Check for Updates**: the
+14. Scripts: click the _Script sources are disabled_ problem. Your **user** settings open at
+    `leuchtturm.script.enabled`; tick it. 🤖 A notification asks whether source `script` may run
+    `python3 …/folder_source.py`: choose **Review and Allow…** and confirm the modal dialog.
+    _Leuchtturm Demo Scripted_ appears. 🤖 Hover it for the release notes from the `.md` file,
+    then install it. 🤖 Run **Test Source…** → `script` to see the exact command line, the
+    script's stderr and its JSON output. 🤖 Untick the setting again: the source turns back
+    into a problem without running. 🤖
+15. Stop `npm run sandbox` with Ctrl+C and run **Leuchtturm: Check for Updates**: the
     `jenkins`, `web` and `npm` sources show up as problems, the share keeps working.

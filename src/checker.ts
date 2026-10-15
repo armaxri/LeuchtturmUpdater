@@ -5,7 +5,15 @@
 
 import type { ConfigProblem, TrackingEntry } from './config';
 import { errorMessage, type Logger } from './log';
-import type { Artifact, ArtifactKind, AvailableVersion, Source, SourceType } from './sources/types';
+import {
+  ActionableError,
+  type Artifact,
+  type ArtifactKind,
+  type AvailableVersion,
+  type ProblemAction,
+  type Source,
+  type SourceType,
+} from './sources/types';
 import { withTimeout, type CancellationToken } from './util/cancellation';
 import { matchesFilters } from './util/glob';
 import { compareVersions, isPrerelease, satisfies } from './version';
@@ -24,6 +32,8 @@ export interface SourceResult {
   error?: string;
   /** Configuration warnings of the source (e.g. TLS verification off). */
   warnings?: readonly string[];
+  /** A command that fixes `error` (e.g. approve a script). */
+  action?: ProblemAction;
   durationMs: number;
 }
 
@@ -64,6 +74,7 @@ export async function listAll(
           type: source.type,
           artifacts: [],
           error: errorMessage(err),
+          action: err instanceof ActionableError ? err.action : undefined,
           warnings: source.warnings,
           durationMs: Date.now() - start,
         };
@@ -106,6 +117,8 @@ export interface Problem {
   source?: string;
   artifactId?: string;
   message: string;
+  /** A command that fixes the problem; the tree runs it on click. */
+  action?: ProblemAction;
 }
 
 export interface CheckState {
@@ -135,7 +148,7 @@ export function computeState(input: ComputeInput): CheckState {
   const problems: Problem[] = (input.configProblems ?? []).map((p) => ({ ...p }));
   for (const r of input.results) {
     if (r.error) {
-      problems.push({ source: r.source, message: `${r.source}: ${r.error}` });
+      problems.push({ source: r.source, message: `${r.source}: ${r.error}`, action: r.action });
     }
   }
 

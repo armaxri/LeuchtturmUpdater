@@ -65,7 +65,7 @@ describe('parseConfig sources', () => {
           badRegex: { type: 'file', path: '/x', filePattern: '(' },
           noGroups: { type: 'file', path: '/x', filePattern: '^(.*)\\.vsix$' },
           badEnv: { type: 'file', path: '${env:LEUCHTTURM_DOES_NOT_EXIST}' },
-          notYet: { type: 'script' },
+          noCommand: { type: 'script' },
           off: { type: 'file', enabled: false },
           notObject: 'nope',
         },
@@ -78,11 +78,13 @@ describe('parseConfig sources', () => {
       'badRegex',
       'noGroups',
       'badEnv',
-      'notYet',
+      'noCommand',
       'notObject',
     ]);
     expect(config.problems.find((p) => p.source === 'noGroups')?.message).toMatch(/\(\?<id>/);
-    expect(config.problems.find((p) => p.source === 'notYet')?.message).toMatch(/not supported/);
+    expect(config.problems.find((p) => p.source === 'noCommand')?.message).toMatch(
+      /"command" is required/,
+    );
   });
 
   it('collects referenced secrets from nested values', () => {

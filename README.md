@@ -6,9 +6,9 @@ click _Update_. It never installs anything on its own.
 
 It uses only public VS Code APIs and does not touch VS Code's marketplace configuration.
 
-> Status: milestone M4. The `file`, `http` and `npm` sources, the sidebar, the status bar and
-> multi-window scheduling work; the `script` source follows. See
-> [`docs/SPEC.md`](docs/SPEC.md).
+> Status: milestone M5. All four source types (`file`, `http`, `npm`, `script`), the sidebar,
+> the status bar and multi-window scheduling work. Next: polish and v1.0 (VSIX verification,
+> proxy support). See [`docs/SPEC.md`](docs/SPEC.md).
 
 ## Quick start (file share)
 
@@ -61,9 +61,11 @@ Sources are read from user settings only. A `leuchtturm.sources` entry in a work
   packages, or any page that lists versions; regex or JSONPath matching, credentials, custom CAs.
 - [`npm`](docs/sources/npm.md): any npm registry (Nexus, Artifactory, Verdaccio, …) with
   packages that wrap a `.vsix`; `.npmrc` credentials, integrity checks, publishing guide.
-- `script`: coming in a later milestone.
+- [`script`](docs/sources/script.md): your own program (Python examples included) speaking a
+  small JSON protocol; off unless enabled in user settings, approved once per program.
 
 All settings, variables and secrets: [`docs/configuration.md`](docs/configuration.md).
+Safeguards and the relation to the VS Code / Marketplace terms: [`docs/security.md`](docs/security.md).
 
 ## Remote development
 

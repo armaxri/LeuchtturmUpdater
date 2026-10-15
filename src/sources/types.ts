@@ -25,6 +25,8 @@ export interface AvailableVersion {
   releaseNotesUrl?: string;
   /** Optional integrity check, hex encoded. */
   sha256?: string;
+  /** The source can fetch release notes on request (`Source.fetchReleaseNotes`). */
+  releaseNotesOnDemand?: boolean;
   /** Opaque, source-specific data needed for download (file path, captured groups, URL...). */
   ref: Record<string, string>;
 }
@@ -64,4 +66,22 @@ export interface Source {
   ): Promise<string | undefined>;
   /** Configuration warnings shown in the log and in tooltips (e.g. TLS checks disabled). */
   readonly warnings?: readonly string[];
+}
+
+/** A command the user can run to fix a problem (shown on the problem node). */
+export interface ProblemAction {
+  title: string;
+  command: string;
+  arguments?: unknown[];
+}
+
+/** An error that comes with a fix, e.g. "open the settings" or "approve this script". */
+export class ActionableError extends Error {
+  override name = 'ActionableError';
+  constructor(
+    message: string,
+    readonly action: ProblemAction,
+  ) {
+    super(message);
+  }
 }

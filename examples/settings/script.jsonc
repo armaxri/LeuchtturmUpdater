@@ -1,0 +1,50 @@
+// Leuchtturm Updater: `script` source examples.
+// Paste into your *user* settings.json. Scripts also need a one-time approval when they first
+// run. Check each source with "Leuchtturm: Test Source…".
+{
+  // Required for any script source. Only the user-level value counts.
+  "leuchtturm.script.enabled": true,
+
+  "leuchtturm.sources": {
+    // examples/script/folder_source.py on a share.
+    "folder": {
+      "type": "script",
+      "command": "python3", // Windows: "py"
+      "script": "~/leuchtturm/folder_source.py",
+      "env": { "VSIX_FOLDER": "/Volumes/tools/vsix" },
+    },
+
+    // examples/script/jenkins_source.py with a stored credential.
+    "jenkins-script": {
+      "type": "script",
+      "command": "python3",
+      "script": "~/leuchtturm/jenkins_source.py",
+      "env": {
+        "JENKINS_URL": "https://jenkins.corp.example",
+        "JENKINS_JOB": "corp-linter",
+        "JENKINS_USER": "ci-reader",
+        "JENKINS_TOKEN": "${secret:jenkins}",
+      },
+      "timeout": 60,
+    },
+
+    // Any executable with its own command line. `ref` values from the list response are
+    // available as ${ref.<key>}.
+    "custom-cli": {
+      "type": "script",
+      "command": "~/bin/artifact-tool",
+      "args": {
+        "list": ["versions", "--format", "leuchtturm"],
+        "download": [
+          "fetch",
+          "${id}@${version}",
+          "--build",
+          "${ref.build}",
+          "--out",
+          "${targetDir}",
+        ],
+        "notes": null,
+      },
+    },
+  },
+}
