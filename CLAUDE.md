@@ -28,7 +28,22 @@ the milestones in §12 of the spec in order, and keep each milestone shippable (
 - `npm test`: unit tests
 - `npm run test:integration`: `@vscode/test-electron`
 - `npm run lint`
+- `npm run sandbox`: open a demo VS Code window (isolated profile, demo share); `-- --no-launch` only prepares it
 - `npx vsce package`: produce the `.vsix`
+
+## User-friendly testing (sandbox + scenario)
+The owner does not do manual test setups. Every feature that is visible to the user must be
+reachable through `npm run sandbox` without any extra steps.
+- `src/test/scenario.ts` is the single source of the demo setup (shares, demo VSIX files,
+  user settings, workspace). The sandbox and the integration tests both build it, so whatever
+  can be tried by hand is also tested automatically.
+- When a feature is added (new source type, UI element, setting), extend the scenario with a
+  demo case for it: a local fake server or script for `http`/`npm`/`script`, never real servers.
+  Add integration tests against it, and add a "Things to try" step to
+  `test/fixtures/sandbox-workspace/TRY-ME.md` with the expected result.
+- Only steps that automation cannot drive (modal dialogs, visual checks) are left for the
+  sandbox alone. Say so in TRY-ME.md.
+- Before calling a milestone done, run `npm run sandbox -- --no-launch` to check that the setup builds.
 
 ## Assets
 - `media/icon.svg` / `media/icon.png` (256 px): Marketplace and extension icon
