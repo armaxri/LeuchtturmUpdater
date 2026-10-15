@@ -1,0 +1,11 @@
+**
+!dist/extension.js
+!media/icon.png
+!media/icon-128.png
+!media/activitybar.svg
+!package.json
+!README.md
+!CHANGELOG.md
+!LICENSE
+!docs/**
+!examples/**

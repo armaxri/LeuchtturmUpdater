@@ -1,0 +1,38 @@
+// Leuchtturm Updater: `file` source example.
+// Paste into your *user* settings.json (Command Palette → "Preferences: Open User Settings (JSON)").
+// Sources in workspace settings are ignored on purpose.
+{
+  "leuchtturm.sources": {
+    // A Windows network share. Backslashes are doubled in JSON.
+    "share": {
+      "type": "file",
+      "path": "\\\\fileserver\\vscode-extensions",
+      "include": ["corp.*"],
+    },
+
+    // A folder in the home directory, scanned at every depth.
+    "local": {
+      "type": "file",
+      "path": "~/vsix",
+      "recursive": true,
+      "timeout": 10,
+    },
+
+    // Custom file names such as `linter_v1.2.3.vsix`. The groups `id` and `version` are required.
+    "legacy": {
+      "type": "file",
+      "path": "${env:TOOLS_DIR}/extensions",
+      "filePattern": "^(?<id>corp\\.[a-z-]+)_v(?<version>\\d+\\.\\d+\\.\\d+)\\.vsix$",
+      "enabled": false,
+    },
+  },
+
+  // Optional. Leave empty to track every installed extension that a source offers.
+  "leuchtturm.extensions": [
+    "corp.linter", // from any source
+    "share:corp.snippets", // only from the source named "share"
+    { "id": "corp.theme", "pin": "2.1.x" }, // stay on 2.1.x
+  ],
+
+  "leuchtturm.checkInterval": 60,
+}

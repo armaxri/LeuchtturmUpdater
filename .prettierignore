@@ -1,0 +1,7 @@
+dist
+out
+.vscode-test
+node_modules
+*.vsix
+docs/SPEC.md
+CLAUDE.md

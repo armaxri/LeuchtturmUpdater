@@ -1,0 +1,12 @@
+{
+  "name": "sample",
+  "displayName": "Leuchtturm Test Sample",
+  "description": "Fixture extension used by the Leuchtturm integration tests.",
+  "version": "0.0.0",
+  "publisher": "leuchtturm-test",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "contributes": {}
+}

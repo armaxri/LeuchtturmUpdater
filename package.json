@@ -1,0 +1,248 @@
+{
+  "name": "leuchtturm-updater",
+  "displayName": "Leuchtturm Updater",
+  "description": "Keeps privately distributed VS Code extensions up to date from file shares, npm registries, Jenkins or custom scripts.",
+  "version": "0.1.0",
+  "publisher": "armaxri",
+  "license": "MIT",
+  "icon": "media/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/armaxri/LeuchtturmUpdater.git"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "update",
+    "vsix",
+    "private extensions",
+    "jenkins",
+    "nexus"
+  ],
+  "extensionKind": [
+    "ui"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "leuchtturm.checkNow",
+        "title": "Check for Updates",
+        "category": "Leuchtturm",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "leuchtturm.update",
+        "title": "Update Extension…",
+        "category": "Leuchtturm"
+      },
+      {
+        "command": "leuchtturm.installVersion",
+        "title": "Install Specific Version…",
+        "category": "Leuchtturm"
+      },
+      {
+        "command": "leuchtturm.clearSkipped",
+        "title": "Reset Skipped Versions",
+        "category": "Leuchtturm"
+      },
+      {
+        "command": "leuchtturm.showLog",
+        "title": "Show Log",
+        "category": "Leuchtturm"
+      }
+    ],
+    "configuration": {
+      "title": "Leuchtturm Updater",
+      "properties": {
+        "leuchtturm.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Master switch for Leuchtturm Updater."
+        },
+        "leuchtturm.checkInterval": {
+          "type": "number",
+          "default": 60,
+          "minimum": 0,
+          "markdownDescription": "Minutes between update checks. `0` disables periodic checks. Values below 5 are raised to 5."
+        },
+        "leuchtturm.checkOnStartup": {
+          "type": "boolean",
+          "default": true,
+          "description": "Check for updates about 10 seconds after VS Code starts."
+        },
+        "leuchtturm.notify": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a notification when new updates are found. Leuchtturm never installs automatically; installing always needs a click."
+        },
+        "leuchtturm.includePrerelease": {
+          "type": "boolean",
+          "default": false,
+          "description": "Consider semver prerelease versions (e.g. 1.2.0-beta.1)."
+        },
+        "leuchtturm.statusBar": {
+          "type": "string",
+          "enum": [
+            "always",
+            "whenUpdates",
+            "never"
+          ],
+          "default": "whenUpdates",
+          "description": "When to show the status bar item."
+        },
+        "leuchtturm.sources": {
+          "type": "object",
+          "default": {},
+          "scope": "machine",
+          "markdownDescription": "Named update sources. Read from **user settings only**; workspace settings are ignored for security. See the [file source docs](https://github.com/armaxri/LeuchtturmUpdater/blob/main/docs/sources/file.md).",
+          "additionalProperties": {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "file",
+                  "npm",
+                  "http",
+                  "script"
+                ],
+                "description": "Source type."
+              },
+              "enabled": {
+                "type": "boolean",
+                "default": true
+              },
+              "timeout": {
+                "type": "number",
+                "minimum": 1,
+                "description": "Timeout in seconds for listing this source."
+              },
+              "include": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Glob filters on extension IDs, e.g. \"corp.*\"."
+              },
+              "exclude": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "path": {
+                "type": "string",
+                "description": "(file) Folder or network share holding .vsix files. Supports ~ and ${env:NAME}."
+              },
+              "recursive": {
+                "type": "boolean",
+                "default": false,
+                "description": "(file) Scan all sub-folders."
+              },
+              "filePattern": {
+                "type": "string",
+                "description": "(file) Regex for VSIX file names with named groups \"id\" and \"version\"."
+              }
+            }
+          }
+        },
+        "leuchtturm.extensions": {
+          "type": "array",
+          "default": [],
+          "markdownDescription": "Extensions to track. Entries are `\"publisher.name\"`, `\"source:publisher.name\"` or `{ \"id\", \"source\", \"pin\", \"enabled\" }`. If empty, every installed extension that a source offers is tracked.",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string"
+                  },
+                  "pin": {
+                    "type": "string",
+                    "description": "Semver range, e.g. \"2.1.x\" or \"^1.4\"."
+                  },
+                  "enabled": {
+                    "type": "boolean",
+                    "default": true
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "leuchtturm.trackAllFromSources": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show every extension any source offers, including ones that are not installed."
+        },
+        "leuchtturm.http.timeout": {
+          "type": "number",
+          "default": 30,
+          "minimum": 1,
+          "description": "Default request timeout in seconds."
+        },
+        "leuchtturm.script.timeout": {
+          "type": "number",
+          "default": 120,
+          "minimum": 1,
+          "description": "Default script timeout in seconds."
+        },
+        "leuchtturm.script.enabled": {
+          "type": "boolean",
+          "default": false,
+          "scope": "machine",
+          "markdownDescription": "Allow `script` sources to run. Only the **user settings** value counts."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build -- --production",
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc -p . --noEmit && tsc -p tsconfig.vitest.json",
+    "lint": "eslint . && prettier --check . && npm run typecheck",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "pretest:integration": "npm run build && tsc -p .",
+    "test:integration": "node out/test/integration/runTest.js",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^18.19.130",
+    "@types/vscode": "^1.90.0",
+    "@vscode/test-electron": "^3.1.0",
+    "@vscode/vsce": "^4.0.0",
+    "esbuild": "^0.28.2",
+    "eslint": "^10.12.0",
+    "mocha": "^12.0.3",
+    "prettier": "^3.9.10",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.71.2",
+    "vitest": "^3.2.7"
+  }
+}
