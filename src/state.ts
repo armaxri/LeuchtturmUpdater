@@ -8,6 +8,14 @@ export interface MementoLike {
   update(key: string, value: unknown): PromiseLike<void>;
 }
 
+/**
+ * SecretStorage key for `${secret:NAME}`. Namespaced so internal keys added later can never
+ * collide with user-chosen names. Changing this orphans every stored credential.
+ */
+export function secretStorageKey(name: string): string {
+  return `leuchtturm.secret.${name}`;
+}
+
 const ANNOUNCED = 'leuchtturm.announced';
 const SKIPPED = 'leuchtturm.skipped';
 const LAST_CHECK = 'leuchtturm.lastCheck';

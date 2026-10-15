@@ -17,7 +17,7 @@ import { parseConfig, referencedSecrets, type Config } from './config';
 import type { Installer } from './installer';
 import { errorMessage, type RedactingLogger } from './log';
 import { createSource } from './sources';
-import type { StateStore } from './state';
+import { secretStorageKey, type StateStore } from './state';
 import type { Target } from './targets/types';
 import { label, notifyUpdates, promptReload } from './ui/notifications';
 import { CancelledError, NEVER_CANCELLED } from './util/cancellation';
@@ -61,7 +61,7 @@ export class Controller implements vscode.Disposable {
     const get = readRawSettings();
     const secrets: Record<string, string> = {};
     for (const name of referencedSecrets(get('sources'))) {
-      const value = await this.secrets.get(name);
+      const value = await this.secrets.get(secretStorageKey(name));
       if (value !== undefined) {
         this.log.redactor.add(value);
         secrets[name] = value;

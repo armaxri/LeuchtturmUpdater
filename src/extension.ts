@@ -18,7 +18,10 @@ import { VsCodeExtensionTarget } from './targets/vscodeExtensionTarget';
 import { Redactor } from './util/redact';
 import { readRawSettings, SECTION } from './vscodeSettings';
 
-/** Returned from `activate`; other extensions and the integration tests can call it. */
+/**
+ * Returned from `activate` for the integration tests.
+ * @internal Unstable and not a supported API: other extensions must not depend on it.
+ */
 export interface LeuchtturmApi {
   checkNow(): Promise<CheckState | undefined>;
   readonly state: CheckState | undefined;

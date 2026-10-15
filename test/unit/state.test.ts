@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { StateStore, type MementoLike } from '../../src/state';
+import { secretStorageKey, StateStore, type MementoLike } from '../../src/state';
 
 class MemoryMemento implements MementoLike {
   readonly data = new Map<string, unknown>();
@@ -42,5 +42,11 @@ describe('StateStore', () => {
     expect(store.lastCheck).toBeUndefined();
     await store.setLastCheck(42);
     expect(store.lastCheck).toBe(42);
+  });
+});
+
+describe('secretStorageKey', () => {
+  it('namespaces secret names', () => {
+    expect(secretStorageKey('jenkins-basic')).toBe('leuchtturm.secret.jenkins-basic');
   });
 });
