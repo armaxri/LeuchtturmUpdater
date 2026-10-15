@@ -1,0 +1,24 @@
+{
+  "name": "hello",
+  "displayName": "Leuchtturm Demo Hello",
+  "description": "Demo extension for the Leuchtturm sandbox. Shows which version is active.",
+  "version": "0.0.0",
+  "publisher": "leuchtturm-demo",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "leuchtturm-demo.hello.version",
+        "title": "Which version is active?",
+        "category": "Leuchtturm Demo"
+      }
+    ]
+  }
+}

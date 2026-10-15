@@ -1,84 +1,66 @@
 /**
  * Integration test launcher (runs in plain Node, not inside VS Code).
  *
- * 1. Packages the fixture extension into a temporary "file share" at two versions.
- * 2. Writes user settings that point Leuchtturm at that share.
- * 3. Downloads VS Code (cached in .vscode-test/) and runs the mocha suite inside it.
+ * 1. Builds the demo scenario (see ../scenario.ts) in a temp folder.
+ * 2. Downloads VS Code (cached in .vscode-test/) and pre-installs the old demo version.
+ * 3. Opens the scenario workspace and runs the mocha suite inside VS Code.
  */
 
+import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { runTests } from '@vscode/test-electron';
-import { createVSIX } from '@vscode/vsce';
+import {
+  downloadAndUnzipVSCode,
+  resolveCliArgsFromVSCodeExecutablePath,
+  runTests,
+} from '@vscode/test-electron';
 
-const ROOT = path.resolve(__dirname, '../../..');
-const FIXTURE = path.join(ROOT, 'test/fixtures/sample-extension');
-
-async function packageFixture(version: string, share: string, work: string): Promise<void> {
-  const dir = path.join(work, `sample-${version}`);
-  await fs.cp(FIXTURE, dir, { recursive: true });
-  const manifestPath = path.join(dir, 'package.json');
-  const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8')) as { version: string };
-  manifest.version = version;
-  await fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2));
-  // `dependencies: false` is accepted at runtime but missing from the published types.
-  const options = {
-    cwd: dir,
-    packagePath: path.join(share, `leuchtturm-test.sample-${version}.vsix`),
-    allowMissingRepository: true,
-    skipLicense: true,
-    dependencies: false,
-  };
-  await createVSIX(options);
-}
+import { ROOT } from '../packageFixture';
+import { buildScenario } from '../scenario';
 
 async function main(): Promise<void> {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'leuchtturm-it-'));
   try {
-    const share = path.join(tmp, 'share');
-    const userDataDir = path.join(tmp, 'user-data');
-    const extensionsDir = path.join(tmp, 'extensions');
-    await fs.mkdir(share, { recursive: true });
-    await fs.mkdir(path.join(userDataDir, 'User'), { recursive: true });
-    await fs.mkdir(extensionsDir, { recursive: true });
-
-    for (const version of ['1.0.0', '1.1.0']) {
-      await packageFixture(version, share, path.join(tmp, 'work'));
-    }
-
-    // Sources are only read from user settings, so the test writes them there.
-    const userSettings = {
+    const scenario = await buildScenario(path.join(tmp, 's'), {
+      // No timers or pop-ups during tests; the suite triggers checks itself.
       'leuchtturm.checkOnStartup': false,
       'leuchtturm.checkInterval': 0,
       'leuchtturm.notify': false,
-      'leuchtturm.sources': { share: { type: 'file', path: share } },
-      'leuchtturm.extensions': ['leuchtturm-test.sample'],
-      'extensions.autoUpdate': false,
-      'extensions.autoCheckUpdates': false,
-    };
-    await fs.writeFile(
-      path.join(userDataDir, 'User', 'settings.json'),
-      JSON.stringify(userSettings, null, 2),
-    );
+    });
+    const profile = [
+      '--user-data-dir',
+      scenario.userDataDir,
+      '--extensions-dir',
+      scenario.extensionsDir,
+    ];
+
+    const vscodeExecutablePath = await downloadAndUnzipVSCode();
+    const [cli, ...cliArgs] = resolveCliArgsFromVSCodeExecutablePath(vscodeExecutablePath);
+    for (const vsix of scenario.preinstall) {
+      const r = spawnSync(cli!, [...cliArgs, ...profile, '--install-extension', vsix], {
+        encoding: 'utf8',
+        // The Windows CLI is a .cmd file, which needs a shell.
+        shell: process.platform === 'win32',
+      });
+      if (r.status !== 0) {
+        throw new Error(`Pre-installing ${vsix} failed:\n${r.stdout}\n${r.stderr}`);
+      }
+    }
 
     await runTests({
+      vscodeExecutablePath,
       extensionDevelopmentPath: ROOT,
       extensionTestsPath: path.join(__dirname, 'suite', 'index.js'),
       launchArgs: [
-        '--user-data-dir',
-        userDataDir,
-        '--extensions-dir',
-        extensionsDir,
+        scenario.workspace,
+        ...profile,
         '--disable-workspace-trust',
         '--skip-welcome',
         '--skip-release-notes',
       ],
-      extensionTestsEnv: {
-        LEUCHTTURM_IT_EXTENSIONS_DIR: extensionsDir,
-        LEUCHTTURM_IT_SHARE: share,
-      },
+      extensionTestsEnv: { LEUCHTTURM_IT_EXTENSIONS_DIR: scenario.extensionsDir },
     });
   } finally {
     await fs.rm(tmp, { recursive: true, force: true });

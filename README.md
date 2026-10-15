@@ -74,8 +74,14 @@ npm run build             # bundle into dist/extension.js
 npm test                  # unit tests (vitest)
 npm run test:integration  # end-to-end in a downloaded VS Code
 npm run lint              # eslint + prettier + tsc
+npm run sandbox           # open a demo VS Code window (isolated profile, demo share)
 npx vsce package          # build the .vsix
 ```
+
+`npm run sandbox` rebuilds `.sandbox/` from scratch, with a fake share holding demo extensions
+at several versions and an old version pre-installed. It then opens a separate VS Code window
+running the development build. `TRY-ME.md` in that window lists what to try. The same scenario
+drives the integration tests (`src/test/scenario.ts`).
 
 ## License
 

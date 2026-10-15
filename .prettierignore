@@ -5,3 +5,4 @@ node_modules
 *.vsix
 docs/SPEC.md
 CLAUDE.md
+.sandbox

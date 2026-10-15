@@ -40,12 +40,12 @@
       },
       {
         "command": "leuchtturm.update",
-        "title": "Update Extension…",
+        "title": "Update Extension\u2026",
         "category": "Leuchtturm"
       },
       {
         "command": "leuchtturm.installVersion",
-        "title": "Install Specific Version…",
+        "title": "Install Specific Version\u2026",
         "category": "Leuchtturm"
       },
       {
@@ -228,7 +228,8 @@
     "test:watch": "vitest",
     "pretest:integration": "npm run build && tsc -p .",
     "test:integration": "node out/test/integration/runTest.js",
-    "package": "vsce package"
+    "package": "vsce package",
+    "sandbox": "npm run build && tsc -p . && node out/test/sandbox.js"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
