@@ -1,5 +1,7 @@
 /** Pieces shared by the per-type source config parsers (`fileConfig.ts`, `httpConfig.ts`, …). */
 
+import { basicAuth } from '../util/http';
+import { expandPath, expandTemplate, type TemplateContext } from '../util/template';
 import type { SourceType } from './types';
 
 export interface CommonSourceConfig {
@@ -69,4 +71,52 @@ export function regexGroupNames(re: RegExp): string[] {
   return Object.keys(new RegExp(`${re.source}|(?<__probe>)`, flags).exec('')?.groups ?? {}).filter(
     (n) => n !== '__probe',
   );
+}
+
+/**
+ * `auth`: `{ "basic": { "user", "password" } }`, `{ "bearer": "…" }` or (npm style)
+ * `{ "token": "…" }`. Returns the expanded `Authorization` header value and the derived
+ * values that logs must redact.
+ */
+export function parseAuth(
+  raw: unknown,
+  ctx: TemplateContext,
+): { authorization?: string; sensitive: string[] } {
+  if (raw === undefined) {
+    return { sensitive: [] };
+  }
+  if (!isObject(raw)) {
+    throw new SourceConfigError('"auth" must be an object');
+  }
+  if (isObject(raw.basic)) {
+    const user = expandTemplate(requiredString(raw.basic.user, 'auth.basic.user'), ctx);
+    const password = expandTemplate(requiredString(raw.basic.password, 'auth.basic.password'), ctx);
+    const authorization = basicAuth(user, password);
+    return { authorization, sensitive: [authorization.slice('Basic '.length), password] };
+  }
+  const bearer = raw.bearer ?? raw.token;
+  if (typeof bearer === 'string') {
+    const token = expandTemplate(bearer, ctx);
+    return { authorization: `Bearer ${token}`, sensitive: [token] };
+  }
+  throw new SourceConfigError(
+    '"auth" must be { "basic": { "user", "password" } }, { "bearer": "…" } or { "token": "…" }',
+  );
+}
+
+export interface TlsConfig {
+  strictSSL: boolean;
+  /** Absolute path of an extra CA certificate (PEM). */
+  caPath?: string;
+}
+
+export function parseTls(
+  raw: { strictSSL?: unknown; ca?: unknown },
+  ctx: TemplateContext,
+): TlsConfig {
+  if (raw.strictSSL !== undefined && typeof raw.strictSSL !== 'boolean') {
+    throw new SourceConfigError('"strictSSL" must be true or false');
+  }
+  const ca = optionalString(raw.ca, 'ca');
+  return { strictSSL: raw.strictSSL !== false, caPath: ca ? expandPath(ca, ctx) : undefined };
 }

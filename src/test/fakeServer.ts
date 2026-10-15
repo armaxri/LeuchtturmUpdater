@@ -7,10 +7,13 @@
  *   /vsix/                                 nginx-style autoindex HTML of `autoindex.dir`
  *   /vsix/<file>                           files from that folder
  *   /redirect?to=<path>                    302 to another path (redirect tests)
+ *   /npm/…                                 npm registry: packuments, tarballs, search API
  *
- * With `auth`, every /job/ request needs HTTP basic auth.
+ * With `auth`, every /job/ request needs HTTP basic auth. With `npm.token`, every registry
+ * request needs `Authorization: Bearer <token>`.
  */
 
+import { createHash } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as http from 'node:http';
 import * as https from 'node:https';
@@ -28,11 +31,25 @@ export interface FakeBuild {
   changelog?: string;
 }
 
+export interface FakeNpmVersion {
+  /** The package tarball (see `makeTgz`). */
+  tgz: Buffer;
+  /** Extra package.json fields, e.g. `vscodeExtension`. `dist` entries override the computed ones. */
+  manifest?: Record<string, unknown>;
+}
+
 export interface FakeServerConfig {
   tls?: boolean;
   auth?: { user: string; password: string };
   jenkins?: { job: string; builds: FakeBuild[] };
   autoindex?: { dir: string };
+  /** npm registry at `/npm/`. */
+  npm?: {
+    token?: string;
+    /** Set to false to emulate registries without the search API. */
+    search?: boolean;
+    packages: Record<string, Record<string, FakeNpmVersion>>;
+  };
 }
 
 export interface FakeServer {
@@ -114,6 +131,11 @@ async function handle(
     return;
   }
 
+  if (config.npm && p.startsWith('/npm/')) {
+    handleNpm(config.npm, req, res, url);
+    return;
+  }
+
   const index = config.autoindex;
   if (index && p.startsWith('/vsix/')) {
     const name = p.slice('/vsix/'.length);
@@ -136,6 +158,73 @@ async function handle(
     return;
   }
   send(res, 404, 'Not found');
+}
+
+function handleNpm(
+  npm: NonNullable<FakeServerConfig['npm']>,
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  url: URL,
+): void {
+  if (npm.token && req.headers.authorization !== `Bearer ${npm.token}`) {
+    send(res, 401, JSON.stringify({ error: 'unauthorized' }), 'application/json');
+    return;
+  }
+  // Keep `%2f` encoded while splitting, as registries see it.
+  const rest = url.pathname.slice('/npm/'.length);
+  const base = `${req.headers.host ? `${url.protocol === 'https:' ? 'https' : 'http'}://${req.headers.host}` : ''}/npm`;
+
+  if (rest === '-/v1/search') {
+    if (npm.search === false) {
+      send(res, 404, 'Not found');
+      return;
+    }
+    const text = url.searchParams.get('text') ?? '';
+    const scope = /scope:(\S+)/.exec(text)?.[1];
+    const names = Object.keys(npm.packages).filter((n) => !scope || n.startsWith(`@${scope}/`));
+    const body = { objects: names.map((name) => ({ package: { name } })), total: names.length };
+    send(res, 200, JSON.stringify(body), 'application/json');
+    return;
+  }
+
+  const tarball = /^(.+)\/-\/(.+)-(\d+\.\d+\.\d+[^/]*)\.tgz$/.exec(decodeURIComponent(rest));
+  if (tarball) {
+    const v = npm.packages[tarball[1]!]?.[tarball[3]!];
+    if (v) {
+      send(res, 200, v.tgz, 'application/octet-stream');
+    } else {
+      send(res, 404, 'Not found');
+    }
+    return;
+  }
+
+  const name = decodeURIComponent(rest);
+  const pkg = npm.packages[name];
+  if (!pkg) {
+    send(res, 404, JSON.stringify({ error: 'not found' }), 'application/json');
+    return;
+  }
+  const unscoped = name.replace(/^@[^/]+\//, '');
+  const versions = Object.fromEntries(
+    Object.entries(pkg).map(([version, v]) => {
+      const { dist, ...manifest } = v.manifest ?? {};
+      return [
+        version,
+        {
+          name,
+          version,
+          ...manifest,
+          dist: {
+            tarball: `${base}/${name}/-/${unscoped}-${version}.tgz`,
+            integrity: `sha512-${createHash('sha512').update(v.tgz).digest('base64')}`,
+            shasum: createHash('sha1').update(v.tgz).digest('hex'),
+            ...(dist as object | undefined),
+          },
+        },
+      ];
+    }),
+  );
+  send(res, 200, JSON.stringify({ name, versions }), 'application/json');
 }
 
 export async function startFakeServer(config: FakeServerConfig): Promise<FakeServer> {

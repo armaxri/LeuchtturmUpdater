@@ -1,0 +1,13 @@
+{
+  "name": "@corp-vscode/linter",
+  "version": "1.4.1",
+  "description": "Corp Linter VS Code extension, distributed through the internal npm registry",
+  "vscodeExtension": "corp.linter",
+  "displayName": "Corp Linter",
+  "files": [
+    "*.vsix"
+  ],
+  "publishConfig": {
+    "registry": "https://nexus.corp.example/repository/npm-internal/"
+  }
+}

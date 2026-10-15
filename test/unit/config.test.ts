@@ -65,7 +65,7 @@ describe('parseConfig sources', () => {
           badRegex: { type: 'file', path: '/x', filePattern: '(' },
           noGroups: { type: 'file', path: '/x', filePattern: '^(.*)\\.vsix$' },
           badEnv: { type: 'file', path: '${env:LEUCHTTURM_DOES_NOT_EXIST}' },
-          notYet: { type: 'npm' },
+          notYet: { type: 'script' },
           off: { type: 'file', enabled: false },
           notObject: 'nope',
         },

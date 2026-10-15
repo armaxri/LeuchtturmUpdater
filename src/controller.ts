@@ -113,7 +113,7 @@ export class Controller implements vscode.Disposable {
     }
     const defaultTimeoutMs = config.settings.httpTimeoutSeconds * 1000;
     for (const c of config.sources) {
-      if (c.type === 'http') {
+      if (c.type === 'http' || c.type === 'npm') {
         c.sensitiveValues.forEach((v) => this.log.redactor.add(v));
       }
     }
@@ -121,7 +121,10 @@ export class Controller implements vscode.Disposable {
       config.sources.map((c) => [
         c.name,
         {
-          source: createSource(c, this.log, { timeoutMs: defaultTimeoutMs }),
+          source: createSource(c, this.log, {
+            timeoutMs: defaultTimeoutMs,
+            addSecret: (v) => this.log.redactor.add(v),
+          }),
           timeoutMs: c.timeoutSeconds ? c.timeoutSeconds * 1000 : defaultTimeoutMs,
           include: c.include,
           exclude: c.exclude,

@@ -76,6 +76,7 @@ async function main(): Promise<void> {
   console.log('VS Code is starting. Follow TRY-ME.md in the new window.');
   console.log(`Fake Jenkins:    ${scenario.jenkinsUrl}  (user "demo", password "demo-password")`);
   console.log(`Fake web server: ${scenario.webUrl}/vsix/`);
+  console.log(`Fake npm registry: ${scenario.npmUrl}  (token in .sandbox/npmrc)`);
   console.log('Keep this running while you try things. Press Ctrl+C to stop the servers.');
   /* eslint-enable no-console */
   await new Promise<void>((resolve) => process.once('SIGINT', resolve));

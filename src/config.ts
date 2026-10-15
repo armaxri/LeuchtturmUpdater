@@ -8,6 +8,7 @@
 
 import { parseFileSource, type FileSourceConfig } from './sources/fileConfig';
 import { parseHttpSource, type HttpSourceConfig } from './sources/httpConfig';
+import { parseNpmSource, type NpmSourceConfig } from './sources/npmConfig';
 import {
   isObject,
   SourceConfigError,
@@ -20,6 +21,7 @@ import { parseRange, type Range } from './version';
 
 export { DEFAULT_FILE_PATTERN, type FileSourceConfig } from './sources/fileConfig';
 export type { HttpSourceConfig } from './sources/httpConfig';
+export type { NpmSourceConfig } from './sources/npmConfig';
 
 export type StatusBarMode = 'always' | 'whenUpdates' | 'never';
 
@@ -39,7 +41,7 @@ export interface Settings {
 }
 
 /** Union of all implemented source configs. Grows with each milestone. */
-export type SourceConfig = FileSourceConfig | HttpSourceConfig;
+export type SourceConfig = FileSourceConfig | HttpSourceConfig | NpmSourceConfig;
 
 export interface TrackingEntry {
   id: string;
@@ -124,6 +126,8 @@ function parseSource(name: string, raw: unknown, ctx: TemplateContext): SourceCo
       return parseFileSource(common, raw, ctx);
     case 'http':
       return parseHttpSource(common, raw, ctx);
+    case 'npm':
+      return parseNpmSource(common, raw, ctx);
     default:
       throw new SourceConfigError(
         `source type "${type}" is not supported by this version of Leuchtturm yet`,

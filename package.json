@@ -2,7 +2,7 @@
   "name": "leuchtturm-updater",
   "displayName": "Leuchtturm Updater",
   "description": "Keeps privately distributed VS Code extensions up to date from file shares, npm registries, Jenkins or custom scripts.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "publisher": "armaxri",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -305,7 +305,7 @@
               },
               "auth": {
                 "type": "object",
-                "description": "(http) Credentials for all requests of this source.",
+                "description": "(http, npm) Credentials for all requests of this source.",
                 "properties": {
                   "basic": {
                     "type": "object",
@@ -320,17 +320,41 @@
                   },
                   "bearer": {
                     "type": "string"
+                  },
+                  "token": {
+                    "type": "string",
+                    "description": "(npm) Bearer token, e.g. \"${secret:nexus-token}\"."
                   }
                 }
               },
               "strictSSL": {
                 "type": "boolean",
                 "default": true,
-                "description": "(http) Set to false only for servers with a broken TLS setup. Prefer \"ca\"."
+                "description": "(http, npm) Set to false only for servers with a broken TLS setup. Prefer \"ca\"."
               },
               "ca": {
                 "type": "string",
-                "description": "(http) Path to an extra trusted CA certificate (PEM)."
+                "description": "(http, npm) Path to an extra trusted CA certificate (PEM)."
+              },
+              "registry": {
+                "type": "string",
+                "description": "(npm) Registry URL, e.g. https://nexus.corp.example/repository/npm-internal/"
+              },
+              "scope": {
+                "type": "string",
+                "description": "(npm) List every package of this scope (e.g. \"@corp-vscode\") via the registry search API."
+              },
+              "packages": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "(npm) Explicit package names. Takes precedence over \"scope\"; needed for registries without a search API."
+              },
+              "npmrc": {
+                "type": "string",
+                "default": "~/.npmrc",
+                "description": "(npm) .npmrc to read credentials from when \"auth\" is not set."
               }
             }
           }

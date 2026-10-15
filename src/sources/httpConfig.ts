@@ -7,18 +7,14 @@
  * every variable they use can exist.
  */
 
-import { basicAuth } from '../util/http';
 import { parseJsonPath } from '../util/jsonPath';
-import {
-  expandPath,
-  expandTemplate,
-  findVariableNames,
-  type TemplateContext,
-} from '../util/template';
+import { expandTemplate, findVariableNames, type TemplateContext } from '../util/template';
 import {
   compileRegex,
   isObject,
   optionalString,
+  parseAuth,
+  parseTls,
   regexGroupNames,
   requiredString,
   SourceConfigError,
@@ -65,31 +61,6 @@ function expandRecord(
   ctx: TemplateContext,
 ): Record<string, string> {
   return Object.fromEntries(Object.entries(record).map(([k, v]) => [k, expandTemplate(v, ctx)]));
-}
-
-function parseAuth(
-  raw: unknown,
-  ctx: TemplateContext,
-): { authorization?: string; sensitive: string[] } {
-  if (raw === undefined) {
-    return { sensitive: [] };
-  }
-  if (!isObject(raw)) {
-    throw new SourceConfigError('"auth" must be an object');
-  }
-  if (isObject(raw.basic)) {
-    const user = expandTemplate(requiredString(raw.basic.user, 'auth.basic.user'), ctx);
-    const password = expandTemplate(requiredString(raw.basic.password, 'auth.basic.password'), ctx);
-    const authorization = basicAuth(user, password);
-    return { authorization, sensitive: [authorization.slice('Basic '.length), password] };
-  }
-  if (typeof raw.bearer === 'string') {
-    const token = expandTemplate(raw.bearer, ctx);
-    return { authorization: `Bearer ${token}`, sensitive: [token] };
-  }
-  throw new SourceConfigError(
-    '"auth" must be { "basic": { "user", "password" } } or { "bearer": "…" }',
-  );
 }
 
 function parseMatch(raw: unknown): HttpMatchConfig {
@@ -208,11 +179,10 @@ export function parseHttpSource(
 
   const { authorization, sensitive } = parseAuth(raw.auth, ctx);
   // `strictSSL` and `ca` may be set on the source or, as in older examples, on `index`.
-  const strictSSL = raw.strictSSL ?? raw.index.strictSSL;
-  if (strictSSL !== undefined && typeof strictSSL !== 'boolean') {
-    throw new SourceConfigError('"strictSSL" must be true or false');
-  }
-  const ca = optionalString(raw.ca ?? raw.index.ca, 'ca');
+  const tls = parseTls(
+    { strictSSL: raw.strictSSL ?? raw.index.strictSSL, ca: raw.ca ?? raw.index.ca },
+    ctx,
+  );
 
   return {
     ...common,
@@ -222,8 +192,7 @@ export function parseHttpSource(
     download,
     releaseNotesUrl,
     authorization,
-    strictSSL: strictSSL !== false,
-    caPath: ca ? expandPath(ca, ctx) : undefined,
+    ...tls,
     templateContext: ctx,
     sensitiveValues: sensitive,
   };

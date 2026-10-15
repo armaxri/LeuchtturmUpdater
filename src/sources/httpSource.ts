@@ -9,11 +9,12 @@ import * as path from 'node:path';
 
 import { errorMessage, type Logger } from '../log';
 import type { CancellationToken } from '../util/cancellation';
-import { httpDownload, httpRequest, type HttpOptions } from '../util/http';
+import { httpDownload, httpRequest } from '../util/http';
 import { expandTemplate } from '../util/template';
 import { compareVersions, isValidVersion } from '../version';
 import type { HttpSourceConfig } from './httpConfig';
 import { extractMatches } from './httpMatcher';
+import { Requester } from './requester';
 import type { Artifact, AvailableVersion, Reporter, Source } from './types';
 
 const PREVIEW_BYTES = 2048;
@@ -24,46 +25,23 @@ export class HttpSource implements Source {
   readonly type = 'http' as const;
   readonly name: string;
   readonly warnings: string[] = [];
-  private ca: Promise<Buffer | undefined> | undefined;
+  private readonly requester: Requester;
 
   constructor(
     private readonly config: HttpSourceConfig,
-    private readonly timeoutMs: number,
+    timeoutMs: number,
     private readonly log: Logger,
   ) {
     this.name = config.name;
+    this.requester = new Requester({
+      strictSSL: config.strictSSL,
+      caPath: config.caPath,
+      timeoutMs,
+      authorization: async () => config.authorization,
+    });
     if (!config.strictSSL) {
       this.warnings.push('TLS certificate verification is disabled ("strictSSL": false)');
     }
-  }
-
-  private loadCa(): Promise<Buffer | undefined> {
-    const caPath = this.config.caPath;
-    this.ca ??= caPath
-      ? fs.readFile(caPath).catch((err: unknown) => {
-          this.ca = undefined; // retry next time, e.g. after the file was fixed
-          throw new Error(`Cannot read CA certificate ${caPath}: ${errorMessage(err)}`);
-        })
-      : Promise.resolve(undefined);
-    return this.ca;
-  }
-
-  private async options(
-    token: CancellationToken,
-    headers: Record<string, string>,
-    timeoutMs = this.timeoutMs,
-  ): Promise<HttpOptions> {
-    const hasAuth = Object.keys(headers).some((k) => k.toLowerCase() === 'authorization');
-    return {
-      headers:
-        this.config.authorization && !hasAuth
-          ? { ...headers, authorization: this.config.authorization }
-          : headers,
-      timeoutMs,
-      strictSSL: this.config.strictSSL,
-      ca: await this.loadCa(),
-      token,
-    };
   }
 
   /** Expands a per-version template with the matched groups plus id/version. */
@@ -86,7 +64,7 @@ export class HttpSource implements Source {
     const start = Date.now();
     report(`${method} ${url}`);
     const res = await httpRequest(url, {
-      ...(await this.options(token, headers)),
+      ...(await this.requester.options(token, headers)),
       method,
       body,
     });
@@ -172,8 +150,12 @@ export class HttpSource implements Source {
     // Our own file name: never trust a server-provided name for a local path.
     const dest = path.join(targetDir, `${artifact.id}-${version.version}.vsix`);
     this.log.info(`[${this.name}] downloading ${url}`);
-    const timeoutMs = Math.max(this.timeoutMs * 10, MIN_DOWNLOAD_TIMEOUT_MS);
-    const res = await httpDownload(url, dest, await this.options(token, headers, timeoutMs));
+    const timeoutMs = Math.max(this.requester.timeoutMs * 10, MIN_DOWNLOAD_TIMEOUT_MS);
+    const res = await httpDownload(
+      url,
+      dest,
+      await this.requester.options(token, headers, { timeoutMs }),
+    );
     this.log.info(`[${this.name}] downloaded ${res.bytes} bytes from ${res.url}`);
     return dest;
   }
@@ -187,7 +169,7 @@ export class HttpSource implements Source {
       return undefined;
     }
     const res = await httpRequest(version.releaseNotesUrl, {
-      ...(await this.options(token, {})),
+      ...(await this.requester.options(token)),
       maxBytes: 1024 * 1024,
     });
     return res.body.toString('utf8');

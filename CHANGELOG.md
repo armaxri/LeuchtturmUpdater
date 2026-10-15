@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.0 (unreleased)
+
+Milestone M4: npm registries.
+
+- `npm` source: reads packuments from any registry, lists a scope via the search API or
+  explicit `packages`, maps versions to extension IDs (`vscodeExtension`, `publisher` + name,
+  or the `.vsix` inside), hides deprecated versions.
+- Credentials from `auth` or `.npmrc` (`_authToken`, `_auth`, `username`/`_password`, most
+  specific path wins), only sent to the registry's own host.
+- Downloads verify `dist.integrity`/`dist.shasum` and extract the single root `.vsix`
+  (built-in tar reader, no new dependency).
+- Docs: `docs/sources/npm.md` with a publishing guide and CI example,
+  `examples/npm/package.json`, `examples/npm/publish.sh`, `examples/settings/npm.jsonc`.
+
 ## 0.3.0 (unreleased)
 
 Milestone M3: HTTP sources.

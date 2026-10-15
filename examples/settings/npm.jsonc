@@ -1,0 +1,30 @@
+// Leuchtturm Updater: `npm` source examples.
+// Paste into your *user* settings.json. Check each source with "Leuchtturm: Test Source…".
+{
+  "leuchtturm.sources": {
+    // Every package of a scope, found via the registry's search API (Verdaccio, Artifactory,
+    // GitHub Packages, npmjs). Credentials come from ~/.npmrc, like for the npm CLI.
+    "verdaccio": {
+      "type": "npm",
+      "registry": "https://verdaccio.corp.example/",
+      "scope": "@corp-vscode",
+    },
+
+    // Nexus: its search API is limited, so list the packages. Token from secret storage.
+    "nexus": {
+      "type": "npm",
+      "registry": "https://nexus.corp.example/repository/npm-internal/",
+      "packages": ["@corp-vscode/linter", "@corp-vscode/snippets"],
+      "auth": { "token": "${secret:nexus-token}" },
+      "ca": "~/certs/corp-root-ca.pem",
+    },
+
+    // A project-specific .npmrc instead of ~/.npmrc.
+    "artifactory": {
+      "type": "npm",
+      "registry": "https://artifactory.corp.example/artifactory/api/npm/npm-vscode/",
+      "scope": "@corp-vscode",
+      "npmrc": "~/work/.npmrc",
+    },
+  },
+}

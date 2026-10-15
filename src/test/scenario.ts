@@ -19,6 +19,9 @@
  *     #40 failed
  *   web server listing over HTTPS with the test CA (regex matcher)
  *     /vsix/leuchtturm-demo.web-0.3.0.vsix        → not installed
+ *   npm registry (token from the scenario's own .npmrc, scope search)
+ *     @leuchtturm-demo/registry 3.0.0 ← pre-installed, 3.1.0 ("vscodeExtension" field)
+ *     @leuchtturm-demo/packed 0.9.0               → ID derived from the .vsix inside
  */
 
 import { createHash } from 'node:crypto';
@@ -28,6 +31,7 @@ import * as path from 'node:path';
 import { startFakeServer, type FakeServer } from './fakeServer';
 import { packageFixture, ROOT } from './packageFixture';
 import { TLS_CERT } from './paths';
+import { makeTgz } from './tarball';
 
 const DEMO = path.join(ROOT, 'test/fixtures/demo-extension');
 
@@ -38,7 +42,12 @@ export const IDS = {
   evil: 'leuchtturm-demo.evil',
   ci: 'leuchtturm-demo.ci',
   web: 'leuchtturm-demo.web',
+  registry: 'leuchtturm-demo.registry',
+  packed: 'leuchtturm-demo.packed',
 } as const;
+
+/** Token the fake npm registry expects; the scenario writes it into its own `.npmrc`. */
+export const NPM_TOKEN = 'npm-demo-token';
 
 /** The fake Jenkins expects this; the user stores it with "Store Credential…". */
 export const JENKINS_SECRET = { name: 'jenkins-demo', value: 'demo-password' } as const;
@@ -53,6 +62,7 @@ export interface Scenario {
   preinstall: string[];
   jenkinsUrl: string;
   webUrl: string;
+  npmUrl: string;
   /** Stops the fake servers. */
   close(): Promise<void>;
 }
@@ -139,6 +149,40 @@ export async function buildScenario(
   const webDir = path.join(root, 'web');
   await demo('web', 'Leuchtturm Demo Web', '0.3.0', path.join(webDir, `${IDS.web}-0.3.0.vsix`));
 
+  // npm packages wrap a .vsix, like `npm pack` would produce from examples/npm.
+  const npmVsix = (name: string, display: string, v: string) =>
+    demo(name, display, v, path.join(root, 'npm-build', `${name}-${v}.vsix`));
+  const wrap = async (vsix: string) =>
+    makeTgz({
+      'package/package.json': '{}',
+      [`package/${path.basename(vsix)}`]: await fs.readFile(vsix),
+    });
+  const registry = (v: string) => npmVsix('registry', 'Leuchtturm Demo Registry', v);
+  const registry300 = await registry('3.0.0');
+  const npmPackages = {
+    '@leuchtturm-demo/registry': {
+      '3.0.0': { tgz: await wrap(registry300), manifest: { vscodeExtension: IDS.registry } },
+      '3.1.0': {
+        tgz: await wrap(await registry('3.1.0')),
+        manifest: { vscodeExtension: IDS.registry },
+      },
+    },
+    '@leuchtturm-demo/packed': {
+      '0.9.0': {
+        // No "vscodeExtension": Leuchtturm reads the ID from the .vsix file name.
+        manifest: { displayName: 'Leuchtturm Demo Packed' },
+        tgz: await wrap(
+          await demo(
+            'packed',
+            'Leuchtturm Demo Packed',
+            '0.9.0',
+            path.join(root, 'npm-build', `${IDS.packed}-0.9.0.vsix`),
+          ),
+        ),
+      },
+    },
+  };
+
   const servers: FakeServer[] = [
     await startFakeServer({
       auth: { user: 'demo', password: JENKINS_SECRET.value },
@@ -162,8 +206,12 @@ export async function buildScenario(
       },
     }),
     await startFakeServer({ tls: true, autoindex: { dir: webDir } }),
+    await startFakeServer({ npm: { token: NPM_TOKEN, packages: npmPackages } }),
   ];
-  const [jenkins, web] = servers as [FakeServer, FakeServer];
+  const [jenkins, web, npm] = servers as [FakeServer, FakeServer, FakeServer];
+  // Credentials the npm way, in a scenario-local .npmrc (your own ~/.npmrc is not touched).
+  const npmrc = path.join(root, 'npmrc');
+  await fs.writeFile(npmrc, `${npm.url.replace(/^https?:/, '')}/npm/:_authToken=${NPM_TOKEN}\n`);
 
   // Workspace settings try to add a source. Leuchtturm must ignore it (SPEC §9).
   await fs.mkdir(path.join(workspace, '.vscode'), { recursive: true });
@@ -212,6 +260,12 @@ export async function buildScenario(
         download: { url: `${web.url}/vsix/\${file}` },
         ca: TLS_CERT,
       },
+      npm: {
+        type: 'npm',
+        registry: `${npm.url}/npm/`,
+        scope: '@leuchtturm-demo',
+        npmrc,
+      },
     },
     'leuchtturm.trackAllFromSources': true,
     'leuchtturm.checkOnStartup': true,
@@ -239,9 +293,10 @@ export async function buildScenario(
     workspace,
     userDataDir,
     extensionsDir,
-    preinstall: [hello('1.0.0'), ci('2.0.0')],
+    preinstall: [hello('1.0.0'), ci('2.0.0'), registry300],
     jenkinsUrl: jenkins.url,
     webUrl: web.url,
+    npmUrl: `${npm.url}/npm/`,
     close: async () => {
       await Promise.all(servers.map((s) => s.close()));
     },
