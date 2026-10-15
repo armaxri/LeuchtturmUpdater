@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.0 (unreleased)
+
+Milestone M2: visibility.
+
+- Leuchtturm view in the activity bar: updates, up to date, not installed and problems, with
+  inline _Update_, _Release notes_, _Skip_ and per-version _Install This Version_.
+- Activity bar badge and status bar item (`leuchtturm.statusBar`), with a spinner while
+  checking.
+- _Update All_, _Test Source…_ and _Open Settings_ commands.
+- Notifications now offer _Show in Leuchtturm_, which selects the update in the tree.
+- Only one VS Code window checks; the others reuse its cached results. Installs of the same
+  extension are locked across windows. Failing sources are retried with exponential back-off.
+- Editing `leuchtturm.sources` re-checks added or changed sources right away.
+
 ## 0.1.0 (unreleased)
 
 First milestone (M1).

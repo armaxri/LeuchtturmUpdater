@@ -1,7 +1,13 @@
 /**
- * Persistent state in `globalState`: which updates were already announced, skipped versions
- * and the last check time. `Memento` is VS Code's key-value store; we only depend on its shape.
+ * Persistent state in `globalState`: announced and skipped versions, the cached result of the
+ * last check, and the leases that coordinate several VS Code windows (SPEC §8).
+ *
+ * `globalState` is shared by all windows of a VS Code installation; a value written in one
+ * window becomes visible in the others after a short delay. `Memento` is VS Code's key-value
+ * store type; we only depend on its shape so this module stays unit-testable.
  */
+
+import type { SourceResult } from './checker';
 
 export interface MementoLike {
   get<T>(key: string): T | undefined;
@@ -18,7 +24,31 @@ export function secretStorageKey(name: string): string {
 
 const ANNOUNCED = 'leuchtturm.announced';
 const SKIPPED = 'leuchtturm.skipped';
-const LAST_CHECK = 'leuchtturm.lastCheck';
+const CACHE = 'leuchtturm.cache';
+const CHECK_LEASE = 'leuchtturm.checkLease';
+const INSTALL_LEASES = 'leuchtturm.installLeases';
+
+/** "Window `owner` holds this until `until` (epoch ms)." Expired leases are free to take. */
+export interface Lease {
+  owner: string;
+  until: number;
+}
+
+export interface SourceFailure {
+  /** Consecutive failed attempts. */
+  count: number;
+  lastAttempt: number;
+}
+
+/** The last check's raw results, shared with the other windows. */
+export interface CachedCheck {
+  /** When the last full check finished. Partial (retry) checks don't move it. */
+  checkedAt: number;
+  /** When any check last changed the cache; other windows reload when it moves. */
+  updatedAt: number;
+  results: SourceResult[];
+  failures: Record<string, SourceFailure>;
+}
 
 /** Keeps the announced list bounded; old entries only matter for versions still offered. */
 const MAX_ANNOUNCED = 500;
@@ -55,11 +85,48 @@ export class StateStore {
     await this.memento.update(SKIPPED, undefined);
   }
 
-  get lastCheck(): number | undefined {
-    return this.memento.get<number>(LAST_CHECK);
+  get cache(): CachedCheck | undefined {
+    return this.memento.get<CachedCheck>(CACHE);
   }
 
-  async setLastCheck(time: number): Promise<void> {
-    await this.memento.update(LAST_CHECK, time);
+  async setCache(cache: CachedCheck): Promise<void> {
+    await this.memento.update(CACHE, cache);
+  }
+
+  get checkLease(): Lease | undefined {
+    return this.memento.get<Lease>(CHECK_LEASE);
+  }
+
+  async setCheckLease(lease: Lease | undefined): Promise<void> {
+    await this.memento.update(CHECK_LEASE, lease);
+  }
+
+  /**
+   * Takes the install lease for `id` unless another window holds a valid one. Returns false
+   * if it is taken. Not atomic across windows, but installs are rare, user-started events.
+   */
+  async acquireInstall(id: string, owner: string, now: number, ttlMs: number): Promise<boolean> {
+    const leases = { ...(this.memento.get<Record<string, Lease>>(INSTALL_LEASES) ?? {}) };
+    const current = leases[id.toLowerCase()];
+    if (current && current.owner !== owner && current.until > now) {
+      return false;
+    }
+    // Drop expired entries so the record does not grow forever.
+    for (const [k, v] of Object.entries(leases)) {
+      if (v.until <= now) {
+        delete leases[k];
+      }
+    }
+    leases[id.toLowerCase()] = { owner, until: now + ttlMs };
+    await this.memento.update(INSTALL_LEASES, leases);
+    return true;
+  }
+
+  async releaseInstall(id: string, owner: string): Promise<void> {
+    const leases = { ...(this.memento.get<Record<string, Lease>>(INSTALL_LEASES) ?? {}) };
+    if (leases[id.toLowerCase()]?.owner === owner) {
+      delete leases[id.toLowerCase()];
+      await this.memento.update(INSTALL_LEASES, leases);
+    }
   }
 }

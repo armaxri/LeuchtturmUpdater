@@ -1,5 +1,5 @@
 /**
- * Update notifications (SPEC §3.3). They only point the user to the update UI; nothing is ever
+ * Update notifications (SPEC §3.3). They only point the user to the sidebar; nothing is ever
  * installed from a notification button.
  *
  * `showInformationMessage` resolves only when the user clicks or dismisses the message, so
@@ -8,22 +8,18 @@
 
 import * as vscode from 'vscode';
 
-import type { ArtifactState } from '../checker';
+import { artifactLabel as label, type ArtifactState } from '../checker';
 
 export interface NotificationActions {
   showUpdates(ids: string[]): void;
   skip(id: string, version: string): void;
 }
 
-export function label(a: Pick<ArtifactState, 'id' | 'displayName'>): string {
-  return a.displayName ?? a.id;
-}
-
 export async function notifyUpdates(
   updates: readonly ArtifactState[],
   actions: NotificationActions,
 ): Promise<void> {
-  const SHOW = 'Show Updates';
+  const SHOW = 'Show in Leuchtturm';
   const SKIP = 'Skip This Version';
   const LATER = 'Later';
   const first = updates[0];

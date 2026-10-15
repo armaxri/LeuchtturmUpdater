@@ -5,6 +5,7 @@
 import * as vscode from 'vscode';
 
 import {
+  artifactLabel as label,
   computeState,
   listAll,
   type ArtifactState,
@@ -17,28 +18,44 @@ import { parseConfig, referencedSecrets, type Config } from './config';
 import type { Installer } from './installer';
 import { errorMessage, type RedactingLogger } from './log';
 import { createSource } from './sources';
-import { secretStorageKey, type StateStore } from './state';
+import { secretStorageKey, type CachedCheck, type StateStore } from './state';
 import type { Target } from './targets/types';
-import { label, notifyUpdates, promptReload } from './ui/notifications';
-import { CancelledError, NEVER_CANCELLED } from './util/cancellation';
+import { notifyUpdates, promptReload } from './ui/notifications';
+import { CancelledError, NEVER_CANCELLED, withTimeout } from './util/cancellation';
+import { matchesFilters } from './util/glob';
 import { compareVersions } from './version';
 import { readRawSettings } from './vscodeSettings';
 
 export interface CheckOptions {
   /** A user-started check: always reports its outcome, even with nothing new to announce. */
   manual: boolean;
+  /** Only these sources (back-off retries). Default: all. */
+  sources?: readonly string[];
+}
+
+/** Hooks into UI parts that are created after the controller. */
+export interface ControllerUi {
+  revealUpdates(ids: readonly string[]): void;
 }
 
 export class Controller implements vscode.Disposable {
   private config: Config | undefined;
   private sources = new Map<string, SourceEntry>();
+  /** Serialized config per source, to detect which sources a settings edit changed. */
+  private fingerprints = new Map<string, string>();
   private lastResults: SourceResult[] = [];
+  /** `updatedAt` of the cache entry our `lastResults` came from. */
+  private cacheSeen = 0;
   private current: CheckState | undefined;
   private running: Promise<CheckState | undefined> | undefined;
+  ui: ControllerUi | undefined;
 
   private readonly stateEmitter = new vscode.EventEmitter<CheckState>();
-  /** Fires whenever the state changes (new check, skip, install). */
+  /** Fires whenever the state changes (new check, skip, install, other window). */
   readonly onDidChangeState = this.stateEmitter.event;
+  private readonly checkingEmitter = new vscode.EventEmitter<boolean>();
+  /** Fires `true` when a check starts and `false` when it ends. */
+  readonly onDidChangeChecking = this.checkingEmitter.event;
 
   constructor(
     private readonly secrets: vscode.SecretStorage,
@@ -52,8 +69,31 @@ export class Controller implements vscode.Disposable {
     return this.current;
   }
 
+  get isChecking(): boolean {
+    return this.running !== undefined;
+  }
+
+  /** The config from the last `loadConfig()`. */
+  get currentConfig(): Config | undefined {
+    return this.config;
+  }
+
   dispose(): void {
     this.stateEmitter.dispose();
+    this.checkingEmitter.dispose();
+  }
+
+  /**
+   * Reads settings and secrets and recreates the sources. Returns the config and the names of
+   * sources that were added or changed since the previous load.
+   */
+  async reloadConfig(): Promise<{ config: Config; changedSources: string[] }> {
+    const before = this.fingerprints;
+    const config = await this.loadConfig();
+    const changedSources = [...this.fingerprints]
+      .filter(([n, f]) => before.get(n) !== f)
+      .map(([n]) => n);
+    return { config, changedSources };
   }
 
   /** Reads settings and secrets and recreates the sources. */
@@ -83,19 +123,35 @@ export class Controller implements vscode.Disposable {
         },
       ]),
     );
+    // RegExp objects serialize to `{}`, so write their source text instead.
+    this.fingerprints = new Map(
+      config.sources.map((c) => [
+        c.name,
+        JSON.stringify(c, (_k, v: unknown) => (v instanceof RegExp ? v.source : v)),
+      ]),
+    );
     this.config = config;
+    void vscode.commands.executeCommand(
+      'setContext',
+      'leuchtturm.noSources',
+      config.sources.length === 0 && config.problems.every((p) => !p.source),
+    );
     return config;
   }
 
   /** Runs a check. Concurrent calls share the check that is already running. */
   check(options: CheckOptions): Promise<CheckState | undefined> {
-    this.running ??= this.runCheck(options).finally(() => {
-      this.running = undefined;
-    });
+    if (!this.running) {
+      this.checkingEmitter.fire(true);
+      this.running = this.runCheck(options).finally(() => {
+        this.running = undefined;
+        this.checkingEmitter.fire(false);
+      });
+    }
     return this.running;
   }
 
-  private async runCheck({ manual }: CheckOptions): Promise<CheckState | undefined> {
+  private async runCheck({ manual, sources }: CheckOptions): Promise<CheckState | undefined> {
     // Re-read the config every time: cheap, and picks up edited settings and new secrets.
     const config = await this.loadConfig();
     if (!config.settings.enabled) {
@@ -107,18 +163,18 @@ export class Controller implements vscode.Disposable {
       }
       return undefined;
     }
-    this.log.info(`Checking ${this.sources.size} source(s)…`);
-    this.lastResults = await listAll([...this.sources.values()], NEVER_CANCELLED, this.log);
+    const entries = [...this.sources.values()].filter(
+      (e) => !sources || sources.includes(e.source.name),
+    );
+    this.log.info(`Checking ${entries.length} source(s)…`);
+    const fresh = await listAll(entries, NEVER_CANCELLED, this.log);
+    await this.storeResults(fresh, sources === undefined);
     const state = this.recompute();
-    await this.store.setLastCheck(state.checkedAt);
 
-    const counts = new Map<string, number>();
-    for (const a of state.artifacts) {
-      counts.set(a.status, (counts.get(a.status) ?? 0) + 1);
-    }
+    const updates = state.artifacts.filter((a) => a.status === 'update').length;
     this.log.info(
-      `Check finished: ${state.artifacts.length} tracked, ` +
-        `${counts.get('update') ?? 0} update(s), ${state.problems.length} problem(s)`,
+      `Check finished: ${state.artifacts.length} tracked, ${updates} update(s), ` +
+        `${state.problems.length} problem(s)`,
     );
     for (const p of state.problems) {
       this.log.warn(p.message);
@@ -127,20 +183,73 @@ export class Controller implements vscode.Disposable {
     return state;
   }
 
-  /** Recomputes the state from the last source results (after a skip or an install). */
-  private recompute(): CheckState {
+  /** Merges fresh results into ours and the shared cache, tracking failures for back-off. */
+  private async storeResults(fresh: SourceResult[], full: boolean): Promise<void> {
+    const now = Date.now();
+    const previous = this.store.cache;
+    const failures = { ...(previous?.failures ?? {}) };
+    const byName = new Map(this.lastResults.map((r) => [r.source, r]));
+    for (const r of fresh) {
+      byName.set(r.source, r);
+      if (r.error) {
+        failures[r.source] = { count: (failures[r.source]?.count ?? 0) + 1, lastAttempt: now };
+      } else {
+        delete failures[r.source];
+      }
+    }
+    this.lastResults = [...byName.values()];
+    const cache: CachedCheck = {
+      checkedAt: full ? now : (previous?.checkedAt ?? now),
+      updatedAt: now,
+      results: this.lastResults,
+      failures,
+    };
+    this.cacheSeen = now;
+    await this.store.setCache(cache);
+  }
+
+  /** Loads results another window wrote to the cache, if they are newer than ours. */
+  adoptCache(): void {
+    const cache = this.store.cache;
+    if (!cache || cache.updatedAt <= this.cacheSeen || !this.config || this.running) {
+      return;
+    }
+    this.log.debug(
+      `Using results checked by another window at ${new Date(cache.checkedAt).toISOString()}`,
+    );
+    this.cacheSeen = cache.updatedAt;
+    this.lastResults = cache.results;
+    this.recompute();
+  }
+
+  /** Recomputes the state from the last results (after a skip, an install, a setting change). */
+  recompute(): CheckState {
     const config = this.config;
     if (!config) {
       throw new Error('recompute() called before loadConfig()');
     }
+    // Settings order breaks ties between sources; drop sources that were removed, and
+    // re-apply filters in case include/exclude changed since the results were cached.
+    const results = config.sources.flatMap((c) => {
+      const r = this.lastResults.find((x) => x.source === c.name);
+      return r
+        ? [
+            {
+              ...r,
+              artifacts: r.artifacts.filter((a) => matchesFilters(a.id, c.include, c.exclude)),
+            },
+          ]
+        : [];
+    });
     const state = computeState({
-      results: this.lastResults,
+      results,
       tracking: config.tracking,
       trackAllFromSources: config.settings.trackAllFromSources,
       includePrerelease: config.settings.includePrerelease,
       installedVersion: (id) => this.target.getInstalledVersion(id),
       isSkipped: (id, version) => this.store.isSkipped(id, version),
       configProblems: config.problems,
+      now: this.store.cache?.checkedAt,
     });
     this.current = state;
     this.stateEmitter.fire(state);
@@ -176,7 +285,7 @@ export class Controller implements vscode.Disposable {
     void this.store.markAnnounced(fresh.map((a) => ({ id: a.id, version: a.latest!.version })));
     // Not awaited: the promise only resolves when the user reacts to the message.
     void notifyUpdates(fresh, {
-      showUpdates: (ids) => void this.pickAndUpdate(ids),
+      showUpdates: (ids) => this.ui?.revealUpdates(ids),
       skip: (id, version) => void this.skip(id, version),
     });
   }
@@ -201,15 +310,19 @@ export class Controller implements vscode.Disposable {
     return this.current ?? (await this.check({ manual: false }));
   }
 
+  findArtifact(id: string): ArtifactState | undefined {
+    return this.current?.artifacts.find((a) => a.id.toLowerCase() === id.toLowerCase());
+  }
+
   /** Quick pick of available updates; installs what the user confirms. */
-  async pickAndUpdate(preselect?: readonly string[]): Promise<void> {
+  async pickAndUpdate(preselect?: readonly string[]): Promise<number> {
     const state = await this.ensureState();
     const updatable = (state?.artifacts ?? []).filter(
       (a) => a.status === 'update' || a.status === 'skipped',
     );
     if (updatable.length === 0) {
       void vscode.window.showInformationMessage('Leuchtturm: no updates available.');
-      return;
+      return 0;
     }
     const wanted = preselect && new Set(preselect.map((id) => id.toLowerCase()));
     const items = updatable.map((a) => ({
@@ -224,21 +337,33 @@ export class Controller implements vscode.Disposable {
       placeHolder: 'Select the extensions to update',
       canPickMany: true,
     });
-    if (picked && picked.length > 0) {
-      await this.installCandidates(picked.map((p) => p.artifact.latest!));
+    if (!picked || picked.length === 0) {
+      return 0;
     }
+    return this.installCandidates(picked.map((p) => p.artifact.latest!));
+  }
+
+  /** Installs every available update (skipped versions excluded). */
+  async updateAll(): Promise<number> {
+    const state = await this.ensureState();
+    const updates = (state?.artifacts ?? []).filter((a) => a.status === 'update');
+    if (updates.length === 0) {
+      void vscode.window.showInformationMessage('Leuchtturm: no updates available.');
+      return 0;
+    }
+    return this.installCandidates(updates.map((a) => a.latest!));
   }
 
   /**
-   * Installs a specific version. With `id`/`version` arguments (e.g. from a keybinding or a
-   * test) the quick picks are skipped. Downgrades always need a modal confirmation.
+   * Installs a specific version. With `id`/`version` arguments (from the tree, a keybinding
+   * or a test) the quick picks are skipped. Downgrades always need a modal confirmation.
    */
   async installVersion(id?: string, version?: string): Promise<number> {
     const state = await this.ensureState();
     const artifacts = state?.artifacts ?? [];
     let artifact: ArtifactState | undefined;
     if (id) {
-      artifact = artifacts.find((a) => a.id.toLowerCase() === id.toLowerCase());
+      artifact = this.findArtifact(id);
       if (!artifact) {
         void vscode.window.showErrorMessage(`Leuchtturm: ${id} is not offered by any source.`);
         return 0;
@@ -351,5 +476,99 @@ export class Controller implements vscode.Disposable {
     // Not awaited: resolves only when the user answers.
     void promptReload(done);
     return done.length;
+  }
+
+  /** Shows release notes: inline text as a Markdown preview, otherwise the notes URL. */
+  async showReleaseNotes(candidate: Candidate): Promise<void> {
+    const { releaseNotes, releaseNotesUrl } = candidate.available;
+    const name = candidate.artifact.displayName ?? candidate.artifact.id;
+    if (releaseNotes) {
+      const doc = await vscode.workspace.openTextDocument({
+        language: 'markdown',
+        content: `# ${name} ${candidate.version}\n\n${releaseNotes}`,
+      });
+      await vscode.commands.executeCommand('markdown.showPreview', doc.uri);
+    } else if (releaseNotesUrl) {
+      await vscode.env.openExternal(vscode.Uri.parse(releaseNotesUrl));
+    } else {
+      void vscode.window.showInformationMessage(
+        `Leuchtturm: no release notes for ${name} ${candidate.version}.`,
+      );
+    }
+  }
+
+  /**
+   * Runs one source and prints everything it saw to the log: matched and skipped files,
+   * filters, resulting artifacts and download references. Returns the report text.
+   */
+  async testSource(name?: string): Promise<string | undefined> {
+    const config = await this.loadConfig();
+    const invalid = config.problems.filter((p) => p.source);
+    if (!name) {
+      const picked = await vscode.window.showQuickPick(
+        [
+          ...config.sources.map((s) => ({ label: s.name, description: s.type })),
+          ...invalid.map((p) => ({ label: p.source!, description: 'invalid configuration' })),
+        ],
+        { title: 'Leuchtturm: Test Source', placeHolder: 'Select a source to test' },
+      );
+      name = picked?.label;
+      if (!name) {
+        return undefined;
+      }
+    }
+
+    const lines: string[] = [];
+    const out = (line: string): void => {
+      lines.push(line);
+    };
+    out(`===== Test source "${name}" =====`);
+    const entry = this.sources.get(name);
+    const problem = invalid.find((p) => p.source === name);
+    if (!entry) {
+      out(problem ? problem.message : `No enabled source named "${name}".`);
+    } else {
+      const { source, timeoutMs, include, exclude } = entry;
+      out(`Type: ${source.type}, timeout: ${timeoutMs / 1000} s`);
+      if (include.length || exclude.length) {
+        out(`Filters: include ${JSON.stringify(include)}, exclude ${JSON.stringify(exclude)}`);
+      }
+      const start = Date.now();
+      try {
+        const artifacts = await withTimeout(
+          timeoutMs,
+          NEVER_CANCELLED,
+          (t) => source.list(t, out),
+          `Source "${name}"`,
+        );
+        out(`Listed in ${Date.now() - start} ms. Result:`);
+        for (const a of artifacts) {
+          const filtered = !matchesFilters(a.id, include, exclude);
+          out(
+            `- ${a.id}${a.displayName ? ` (${a.displayName})` : ''}${filtered ? '  [removed by filters]' : ''}`,
+          );
+          for (const v of a.versions) {
+            const extras = [
+              v.sha256 ? `sha256 ${v.sha256.slice(0, 12)}…` : undefined,
+              v.releaseNotes ? 'release notes' : undefined,
+              v.releaseNotesUrl ? `notes ${v.releaseNotesUrl}` : undefined,
+            ].filter(Boolean);
+            out(`    ${v.version}${extras.length ? `  (${extras.join(', ')})` : ''}`);
+            for (const [k, val] of Object.entries(v.ref)) {
+              out(`      ${k}: ${val}`);
+            }
+          }
+        }
+        if (artifacts.length === 0) {
+          out('Nothing found.');
+        }
+      } catch (err) {
+        out(`FAILED after ${Date.now() - start} ms: ${errorMessage(err)}`);
+      }
+    }
+    const text = lines.join('\n');
+    this.log.info(text);
+    this.log.show();
+    return this.log.redactor.redact(text);
   }
 }

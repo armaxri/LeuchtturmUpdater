@@ -18,12 +18,20 @@ import type { FileSourceConfig } from '../config';
 import { errorMessage, type Logger } from '../log';
 import { throwIfCancelled, type CancellationToken } from '../util/cancellation';
 import { compareVersions, isValidVersion } from '../version';
-import type { Artifact, AvailableVersion, Source } from './types';
+import type { Artifact, AvailableVersion, Reporter, Source } from './types';
 
 interface Found {
   id: string;
   version: string;
   file: string;
+}
+
+interface ScanContext {
+  /** All file names per directory, so sidecar lookups need no extra I/O on slow shares. */
+  filesByDir: Map<string, Set<string>>;
+  found: Found[];
+  token: CancellationToken;
+  report: Reporter;
 }
 
 export class FileSource implements Source {
@@ -37,7 +45,7 @@ export class FileSource implements Source {
     this.name = config.name;
   }
 
-  async list(token: CancellationToken): Promise<Artifact[]> {
+  async list(token: CancellationToken, report: Reporter = () => undefined): Promise<Artifact[]> {
     const root = this.config.path;
     this.log.debug(`[${this.name}] scanning ${root}${this.config.recursive ? ' (recursive)' : ''}`);
     // `.catch` turns the low-level error into a readable one; `cause` keeps the original.
@@ -53,10 +61,11 @@ export class FileSource implements Source {
       throw new Error(`${root} is not a folder`);
     }
 
-    // All file names per directory, so sidecar lookups need no extra I/O on slow shares.
-    const filesByDir = new Map<string, Set<string>>();
-    const found: Found[] = [];
-    await this.scan(root, [], filesByDir, found, token);
+    report(`Folder: ${root}${this.config.recursive ? ' (recursive)' : ''}`);
+    report(`File pattern: ${this.config.filePattern.source}`);
+    const ctx: ScanContext = { filesByDir: new Map(), found: [], token, report };
+    await this.scan(root, [], ctx);
+    const { filesByDir, found } = ctx;
 
     const byId = new Map<string, { id: string; versions: Map<string, AvailableVersion> }>();
     for (const f of found) {
@@ -68,6 +77,7 @@ export class FileSource implements Source {
       }
       if (entry.versions.has(f.version)) {
         this.log.debug(`[${this.name}] duplicate ${f.id}@${f.version} ignored: ${f.file}`);
+        report(`  duplicate, ignored: ${f.file}`);
         continue;
       }
       entry.versions.set(f.version, await this.describe(f, filesByDir));
@@ -86,16 +96,15 @@ export class FileSource implements Source {
   }
 
   /** Walks `dir`. `parents` holds the folder names between the root and `dir`. */
-  private async scan(
-    dir: string,
-    parents: string[],
-    filesByDir: Map<string, Set<string>>,
-    out: Found[],
-    token: CancellationToken,
-  ): Promise<void> {
-    throwIfCancelled(token);
+  private async scan(dir: string, parents: string[], ctx: ScanContext): Promise<void> {
+    throwIfCancelled(ctx.token);
     const entries = await fs.readdir(dir, { withFileTypes: true });
-    filesByDir.set(dir, new Set(entries.filter((e) => e.isFile()).map((e) => e.name)));
+    ctx.filesByDir.set(dir, new Set(entries.filter((e) => e.isFile()).map((e) => e.name)));
+    const rel = (name: string) => path.join(...parents, name);
+    const skip = (name: string, reason: string, level: 'trace' | 'debug' = 'trace') => {
+      this.log[level](`[${this.name}] skipping ${rel(name)}: ${reason}`);
+      ctx.report(`  skipped  ${rel(name)}: ${reason}`);
+    };
 
     for (const entry of entries) {
       if (!entry.isFile() || !entry.name.toLowerCase().endsWith('.vsix')) {
@@ -105,33 +114,30 @@ export class FileSource implements Source {
       const id = match?.groups?.id;
       const version = match?.groups?.version;
       if (!id || !version) {
-        this.log.trace(`[${this.name}] skipping ${entry.name}: does not match filePattern`);
+        skip(entry.name, 'does not match the file pattern');
         continue;
       }
       if (!isValidVersion(version)) {
-        this.log.debug(`[${this.name}] skipping ${entry.name}: "${version}" is not semver`);
+        skip(entry.name, `"${version}" is not a semver version`, 'debug');
         continue;
       }
       if (!this.config.recursive && parents.length === 1 && !this.layoutMatches(parents[0]!, id)) {
-        this.log.trace(`[${this.name}] skipping ${entry.name}: folder does not match its id`);
+        skip(entry.name, `folder "${parents[0]}" is neither the publisher nor the id`);
         continue;
       }
-      out.push({ id, version, file: path.join(dir, entry.name) });
+      ctx.report(`  matched  ${rel(entry.name)} → ${id} ${version}`);
+      ctx.found.push({ id, version, file: path.join(dir, entry.name) });
     }
 
     // Non-recursive scans look one level deep for the `<publisher>/` and `<id>/` layouts.
     if (this.config.recursive || parents.length === 0) {
       for (const entry of entries) {
         if (entry.isDirectory() && !entry.name.startsWith('.')) {
-          await this.scan(
-            path.join(dir, entry.name),
-            [...parents, entry.name],
-            filesByDir,
-            out,
-            token,
-          );
+          await this.scan(path.join(dir, entry.name), [...parents, entry.name], ctx);
         }
       }
+    } else if (entries.some((e) => e.isDirectory())) {
+      ctx.report(`  not scanned: sub-folders of ${path.join(...parents)} (set "recursive": true)`);
     }
   }
 

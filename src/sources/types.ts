@@ -14,6 +14,9 @@ export type SourceType = 'file' | 'npm' | 'http' | 'script';
 
 export const SOURCE_TYPES: readonly SourceType[] = ['file', 'npm', 'http', 'script'];
 
+/** Receives diagnostic lines for "Leuchtturm: Test Source…". */
+export type Reporter = (line: string) => void;
+
 export interface AvailableVersion {
   /** Semver. */
   version: string;
@@ -38,7 +41,11 @@ export interface Artifact {
 export interface Source {
   readonly name: string;
   readonly type: SourceType;
-  list(token: CancellationToken): Promise<Artifact[]>;
+  /**
+   * Lists everything the source offers. `report`, if given, receives human-readable details
+   * about every decision (matched, skipped and why); used by "Test Source".
+   */
+  list(token: CancellationToken, report?: Reporter): Promise<Artifact[]>;
   /**
    * Downloads `version` into `targetDir` and returns the absolute path of the result.
    * For VS Code extensions this is a `.vsix` file. Future kinds may return a directory.

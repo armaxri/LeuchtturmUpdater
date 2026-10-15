@@ -127,3 +127,22 @@ describe('FileSource.download', () => {
     expect(await fs.readFile(file, 'utf8')).toBe('payload');
   });
 });
+
+describe('FileSource reporting', () => {
+  it('explains every decision for Test Source', async () => {
+    const dir = await tempDir();
+    await writeFiles(dir, {
+      'corp.linter-1.4.1.vsix': 'x',
+      'random.vsix': 'x',
+      'other/corp.x-1.0.0.vsix': 'x',
+      'corp/deeper/corp.y-1.0.0.vsix': 'x',
+    });
+    const lines: string[] = [];
+    await source(dir).list(NEVER_CANCELLED, (l) => lines.push(l));
+    const text = lines.join('\n');
+    expect(text).toContain('matched  corp.linter-1.4.1.vsix → corp.linter 1.4.1');
+    expect(text).toContain('skipped  random.vsix: does not match the file pattern');
+    expect(text).toMatch(/skipped {2}other.corp\.x-1\.0\.0\.vsix: folder "other" is neither/);
+    expect(text).toContain('not scanned: sub-folders of corp');
+  });
+});

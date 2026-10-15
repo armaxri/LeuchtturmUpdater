@@ -4,6 +4,8 @@ import * as path from 'node:path';
 
 import { afterEach } from 'vitest';
 
+import type { MementoLike } from '../../src/state';
+
 const created: string[] = [];
 
 /** A fresh temp directory, removed after each test. */
@@ -29,4 +31,19 @@ export async function writeFiles(root: string, files: Record<string, string>): P
 /** A settings accessor backed by a plain object, like `readRawSettings()`. */
 export function settings(values: Record<string, unknown>): (key: string) => unknown {
   return (key) => values[key];
+}
+
+/** In-memory stand-in for VS Code's `globalState`. */
+export class MemoryMemento implements MementoLike {
+  readonly data = new Map<string, unknown>();
+  get<T>(key: string): T | undefined {
+    return this.data.get(key) as T | undefined;
+  }
+  async update(key: string, value: unknown): Promise<void> {
+    if (value === undefined) {
+      this.data.delete(key);
+    } else {
+      this.data.set(key, value);
+    }
+  }
 }

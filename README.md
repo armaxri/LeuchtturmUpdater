@@ -6,8 +6,9 @@ click _Update_. It never installs anything on its own.
 
 It uses only public VS Code APIs and does not touch VS Code's marketplace configuration.
 
-> Status: milestone M1. The `file` source works; the sidebar, status bar and the `npm`, `http`
-> and `script` sources follow. See [`docs/SPEC.md`](docs/SPEC.md).
+> Status: milestone M2. The `file` source, the sidebar, the status bar and multi-window
+> scheduling work; the `npm`, `http` and `script` sources follow. See
+> [`docs/SPEC.md`](docs/SPEC.md).
 
 ## Quick start (file share)
 

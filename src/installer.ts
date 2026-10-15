@@ -14,6 +14,17 @@ import type { Target } from './targets/types';
 import { throwIfCancelled, type CancellationToken } from './util/cancellation';
 import { verifySha256 } from './util/hash';
 
+/** Cross-window install lock (SPEC §8): never install the same artifact from two windows. */
+export interface InstallLock {
+  acquire(id: string): Promise<boolean>;
+  release(id: string): Promise<void>;
+}
+
+const NO_LOCK: InstallLock = {
+  acquire: async () => true,
+  release: async () => undefined,
+};
+
 export class Installer {
   /** IDs with an install in progress in this window. */
   private readonly busy = new Set<string>();
@@ -22,6 +33,7 @@ export class Installer {
     private readonly downloadsDir: string,
     private readonly target: Target,
     private readonly log: Logger,
+    private readonly lock: InstallLock = NO_LOCK,
   ) {}
 
   async install(source: Source, candidate: Candidate, token: CancellationToken): Promise<void> {
@@ -31,7 +43,12 @@ export class Installer {
     if (this.busy.has(lock)) {
       throw new Error(`${id} is already being installed`);
     }
+    // Mark busy before the first `await`, so a second call in this window sees it.
     this.busy.add(lock);
+    if (!(await this.lock.acquire(id))) {
+      this.busy.delete(lock);
+      throw new Error(`${id} is already being installed in another window`);
+    }
     // A fresh folder per install, so parallel windows and leftovers never collide.
     const dir = path.join(this.downloadsDir, randomUUID());
     try {
@@ -47,6 +64,7 @@ export class Installer {
       this.log.info(`Installed ${id}@${available.version}`);
     } finally {
       this.busy.delete(lock);
+      await this.lock.release(id);
       await fs.rm(dir, { recursive: true, force: true }).catch((err: unknown) => {
         this.log.warn(`Could not delete ${dir}: ${errorMessage(err)}`);
       });

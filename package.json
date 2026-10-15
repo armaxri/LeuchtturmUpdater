@@ -2,7 +2,7 @@
   "name": "leuchtturm-updater",
   "displayName": "Leuchtturm Updater",
   "description": "Keeps privately distributed VS Code extensions up to date from file shares, npm registries, Jenkins or custom scripts.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "armaxri",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -39,6 +39,12 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "leuchtturm.updateAll",
+        "title": "Update All",
+        "category": "Leuchtturm",
+        "icon": "$(cloud-download)"
+      },
+      {
         "command": "leuchtturm.update",
         "title": "Update Extension\u2026",
         "category": "Leuchtturm"
@@ -49,6 +55,12 @@
         "category": "Leuchtturm"
       },
       {
+        "command": "leuchtturm.testSource",
+        "title": "Test Source\u2026",
+        "category": "Leuchtturm",
+        "icon": "$(beaker)"
+      },
+      {
         "command": "leuchtturm.clearSkipped",
         "title": "Reset Skipped Versions",
         "category": "Leuchtturm"
@@ -56,7 +68,34 @@
       {
         "command": "leuchtturm.showLog",
         "title": "Show Log",
-        "category": "Leuchtturm"
+        "category": "Leuchtturm",
+        "icon": "$(output)"
+      },
+      {
+        "command": "leuchtturm.openSettings",
+        "title": "Open Settings",
+        "category": "Leuchtturm",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "leuchtturm.tree.update",
+        "title": "Update",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "leuchtturm.tree.installVersion",
+        "title": "Install This Version",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "leuchtturm.tree.skip",
+        "title": "Skip This Version",
+        "icon": "$(circle-slash)"
+      },
+      {
+        "command": "leuchtturm.tree.releaseNotes",
+        "title": "Release Notes",
+        "icon": "$(book)"
       }
     ],
     "configuration": {
@@ -215,6 +254,136 @@
           "markdownDescription": "Allow `script` sources to run. Only the **user settings** value counts."
         }
       }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "leuchtturm",
+          "title": "Leuchtturm",
+          "icon": "media/activitybar.svg"
+        }
+      ]
+    },
+    "views": {
+      "leuchtturm": [
+        {
+          "id": "leuchtturm.updates",
+          "name": "Updates",
+          "icon": "media/activitybar.svg",
+          "contextualTitle": "Leuchtturm"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "leuchtturm.updates",
+        "when": "leuchtturm.noSources",
+        "contents": "No update sources are configured yet. Add one to \"leuchtturm.sources\" in your user settings.\n[Open Settings](command:leuchtturm.openSettings)\n[Read the docs](https://github.com/armaxri/LeuchtturmUpdater/blob/main/docs/sources/file.md)"
+      },
+      {
+        "view": "leuchtturm.updates",
+        "when": "!leuchtturm.noSources",
+        "contents": "Nothing to show yet. Leuchtturm tracks installed extensions that your sources offer; set \"leuchtturm.trackAllFromSources\" to list everything.\n[Check for Updates](command:leuchtturm.checkNow)\n[Test Source\u2026](command:leuchtturm.testSource)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "leuchtturm.checkNow",
+          "when": "view == leuchtturm.updates",
+          "group": "navigation@1"
+        },
+        {
+          "command": "leuchtturm.updateAll",
+          "when": "view == leuchtturm.updates",
+          "group": "navigation@2"
+        },
+        {
+          "command": "leuchtturm.openSettings",
+          "when": "view == leuchtturm.updates",
+          "group": "navigation@3"
+        },
+        {
+          "command": "leuchtturm.showLog",
+          "when": "view == leuchtturm.updates",
+          "group": "navigation@4"
+        },
+        {
+          "command": "leuchtturm.testSource",
+          "when": "view == leuchtturm.updates",
+          "group": "more@1"
+        },
+        {
+          "command": "leuchtturm.clearSkipped",
+          "when": "view == leuchtturm.updates",
+          "group": "more@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "leuchtturm.tree.update",
+          "when": "view == leuchtturm.updates && viewItem =~ /^artifact\\.(update|skipped|not-installed)/",
+          "group": "inline@1"
+        },
+        {
+          "command": "leuchtturm.tree.releaseNotes",
+          "when": "view == leuchtturm.updates && viewItem =~ /^artifact\\..*\\.notes$/",
+          "group": "inline@2"
+        },
+        {
+          "command": "leuchtturm.tree.skip",
+          "when": "view == leuchtturm.updates && viewItem =~ /^artifact\\.update/",
+          "group": "inline@3"
+        },
+        {
+          "command": "leuchtturm.tree.update",
+          "when": "view == leuchtturm.updates && viewItem =~ /^artifact\\.(update|skipped|not-installed)/",
+          "group": "1_install@1"
+        },
+        {
+          "command": "leuchtturm.tree.skip",
+          "when": "view == leuchtturm.updates && viewItem =~ /^artifact\\.update/",
+          "group": "1_install@2"
+        },
+        {
+          "command": "leuchtturm.tree.releaseNotes",
+          "when": "view == leuchtturm.updates && viewItem =~ /^artifact\\..*\\.notes$/",
+          "group": "2_info@1"
+        },
+        {
+          "command": "leuchtturm.tree.installVersion",
+          "when": "view == leuchtturm.updates && viewItem =~ /^version(?!\\.installed)/",
+          "group": "inline@1"
+        },
+        {
+          "command": "leuchtturm.tree.installVersion",
+          "when": "view == leuchtturm.updates && viewItem =~ /^version/",
+          "group": "1_install@1"
+        },
+        {
+          "command": "leuchtturm.tree.releaseNotes",
+          "when": "view == leuchtturm.updates && viewItem =~ /^version.*\\.notes$/",
+          "group": "2_info@1"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "leuchtturm.tree.update",
+          "when": "false"
+        },
+        {
+          "command": "leuchtturm.tree.installVersion",
+          "when": "false"
+        },
+        {
+          "command": "leuchtturm.tree.skip",
+          "when": "false"
+        },
+        {
+          "command": "leuchtturm.tree.releaseNotes",
+          "when": "false"
+        }
+      ]
     }
   },
   "scripts": {

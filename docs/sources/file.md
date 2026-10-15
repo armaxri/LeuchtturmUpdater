@@ -52,6 +52,12 @@ is anything deeper than one level. Use `"recursive": true` for other structures.
 
 Files whose version is not valid semver are skipped (visible in the log at debug level).
 
+## Debugging
+
+Run **Leuchtturm: Test Source…** and pick the source. The log then lists every `.vsix` file
+with the decision and its reason (matched, does not match the pattern, not semver, wrong
+folder), sub-folders that were not scanned, and the resulting versions with their file paths.
+
 ## Sidecar files
 
 Optional files next to a VSIX are picked up automatically:

@@ -49,6 +49,7 @@ function setup(payload: string, sha256?: string) {
   const candidate: Candidate = {
     version: '1.4.1',
     sourceName: 'fake',
+    sourceType: 'file',
     artifact,
     available: artifact.versions[0]!,
   };
@@ -91,6 +92,26 @@ describe('Installer', () => {
       /already being installed/,
     );
     await first;
+    expect(target.installed).toHaveLength(1);
+  });
+
+  it('respects the cross-window install lock and releases it afterwards', async () => {
+    const downloads = await tempDir();
+    const target = new FakeTarget();
+    const { source, candidate } = setup('x');
+    const held = new Set<string>(['corp.linter']);
+    const released: string[] = [];
+    const installer = new Installer(downloads, target, NULL_LOGGER, {
+      acquire: async (id) => !held.has(id),
+      release: async (id) => void released.push(id),
+    });
+    await expect(installer.install(source, candidate, NEVER_CANCELLED)).rejects.toThrow(
+      /another window/,
+    );
+    expect(released).toEqual([]);
+    held.clear();
+    await installer.install(source, candidate, NEVER_CANCELLED);
+    expect(released).toEqual(['corp.linter']);
     expect(target.installed).toHaveLength(1);
   });
 });

@@ -73,6 +73,7 @@ export async function listAll(
 export interface Candidate {
   version: string;
   sourceName: string;
+  sourceType: SourceType;
   /** The artifact as reported by that source. */
   artifact: Artifact;
   available: AvailableVersion;
@@ -91,6 +92,11 @@ export interface ArtifactState {
   /** All allowed candidates, newest first, one per version. */
   candidates: Candidate[];
   pin?: string;
+}
+
+/** Display name, falling back to the ID. */
+export function artifactLabel(a: { id: string; displayName?: string }): string {
+  return a.displayName ?? a.id;
 }
 
 export interface Problem {
@@ -135,7 +141,13 @@ export function computeState(input: ComputeInput): CheckState {
       const list = offered.get(key) ?? [];
       offered.set(key, list);
       for (const available of artifact.versions) {
-        list.push({ version: available.version, sourceName: r.source, artifact, available });
+        list.push({
+          version: available.version,
+          sourceName: r.source,
+          sourceType: r.type,
+          artifact,
+          available,
+        });
       }
     }
   }

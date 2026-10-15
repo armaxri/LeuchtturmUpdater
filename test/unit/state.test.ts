@@ -1,20 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { secretStorageKey, StateStore, type MementoLike } from '../../src/state';
-
-class MemoryMemento implements MementoLike {
-  readonly data = new Map<string, unknown>();
-  get<T>(key: string): T | undefined {
-    return this.data.get(key) as T | undefined;
-  }
-  async update(key: string, value: unknown): Promise<void> {
-    if (value === undefined) {
-      this.data.delete(key);
-    } else {
-      this.data.set(key, value);
-    }
-  }
-}
+import { secretStorageKey, StateStore } from '../../src/state';
+import { MemoryMemento } from './helpers';
 
 describe('StateStore', () => {
   it('remembers announced versions case-insensitively', async () => {
@@ -37,11 +24,17 @@ describe('StateStore', () => {
     expect(store.isSkipped('corp.linter', '1.4.2')).toBe(false);
   });
 
-  it('stores the last check time', async () => {
+  it('hands out install leases per id and respects other windows', async () => {
     const store = new StateStore(new MemoryMemento());
-    expect(store.lastCheck).toBeUndefined();
-    await store.setLastCheck(42);
-    expect(store.lastCheck).toBe(42);
+    expect(await store.acquireInstall('corp.a', 'w1', 0, 1000)).toBe(true);
+    expect(await store.acquireInstall('CORP.A', 'w2', 500, 1000)).toBe(false);
+    expect(await store.acquireInstall('corp.b', 'w2', 500, 1000)).toBe(true);
+    // Expired leases are free again.
+    expect(await store.acquireInstall('corp.a', 'w2', 1500, 1000)).toBe(true);
+    await store.releaseInstall('corp.a', 'w1'); // not the owner any more: no effect
+    expect(await store.acquireInstall('corp.a', 'w1', 1600, 1000)).toBe(false);
+    await store.releaseInstall('corp.a', 'w2');
+    expect(await store.acquireInstall('corp.a', 'w1', 1600, 1000)).toBe(true);
   });
 });
 
