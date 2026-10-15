@@ -21,6 +21,12 @@ export class VsCodeExtensionTarget implements Target {
     return typeof version === 'string' ? version : undefined;
   }
 
+  getDisplayName(id: string): string | undefined {
+    const name: unknown = vscode.extensions.getExtension(id)?.packageJSON?.displayName;
+    // Localized manifests use placeholders like `%displayName%`; those are no use here.
+    return typeof name === 'string' && !name.startsWith('%') ? name : undefined;
+  }
+
   async install(downloadedPath: string, id: string, version: string): Promise<void> {
     await vscode.commands.executeCommand(
       'workbench.extensions.installExtension',

@@ -71,7 +71,7 @@ describe('buildTree', () => {
 
   it('omits empty groups and returns nothing without a state', () => {
     expect(buildTree(undefined)).toEqual([]);
-    const empty = { checkedAt: 0, artifacts: [], problems: [] };
+    const empty = { checkedAt: 0, artifacts: [], problems: [], sourceWarnings: {} };
     expect(buildTree(empty)).toEqual([]);
   });
 

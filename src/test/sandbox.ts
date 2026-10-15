@@ -1,6 +1,7 @@
 /**
  * `npm run sandbox`: prepares the demo scenario in `.sandbox/` and opens a VS Code window
- * running the development build of Leuchtturm with an isolated profile.
+ * running the development build of Leuchtturm with an isolated profile. Keeps running to
+ * serve the fake Jenkins and web server until you press Ctrl+C.
  *
  * Flags:
  *   --no-launch   prepare everything but do not open VS Code (used to validate the setup)
@@ -57,6 +58,7 @@ async function main(): Promise<void> {
   /* eslint-disable no-console */
   console.log(`\nSandbox ready in ${scenario.root}`);
   if (!launch) {
+    await scenario.close();
     return;
   }
   await run(
@@ -72,7 +74,12 @@ async function main(): Promise<void> {
     true,
   );
   console.log('VS Code is starting. Follow TRY-ME.md in the new window.');
+  console.log(`Fake Jenkins:    ${scenario.jenkinsUrl}  (user "demo", password "demo-password")`);
+  console.log(`Fake web server: ${scenario.webUrl}/vsix/`);
+  console.log('Keep this running while you try things. Press Ctrl+C to stop the servers.');
   /* eslint-enable no-console */
+  await new Promise<void>((resolve) => process.once('SIGINT', resolve));
+  await scenario.close();
 }
 
 main().catch((err: unknown) => {

@@ -1,0 +1,71 @@
+// Leuchtturm Updater: `http` source examples.
+// Paste into your *user* settings.json. Store credentials with
+// "Leuchtturm: Store Credential…" (they never belong in settings.json).
+// Check each source with "Leuchtturm: Test Source…".
+{
+  "leuchtturm.sources": {
+    // Jenkins JSON API. Fields of each artifact and of its build are available as groups.
+    "jenkins-linter": {
+      "type": "http",
+      "index": {
+        "url": "https://jenkins.corp.example/job/corp-linter/api/json?tree=builds[number,result,artifacts[fileName,relativePath]]{0,20}",
+      },
+      "auth": { "basic": { "user": "ci-reader", "password": "${secret:jenkins}" } },
+      "match": {
+        "jsonPath": "$.builds[*].artifacts[*]",
+        "where": { "result": "SUCCESS" },
+        "field": "fileName",
+        "regex": "^(?<id>corp\\.[\\w-]+)-(?<version>\\d+\\.\\d+\\.\\d+)\\.vsix$",
+      },
+      "download": {
+        "url": "https://jenkins.corp.example/job/corp-linter/${number}/artifact/${relativePath}",
+      },
+      "releaseNotes": {
+        "url": "https://jenkins.corp.example/job/corp-linter/${number}/artifact/CHANGELOG.md",
+      },
+    },
+
+    // A web server directory listing (Apache/nginx autoindex) behind an internal CA.
+    "web": {
+      "type": "http",
+      "index": { "url": "https://files.corp.example/vscode/" },
+      "match": {
+        "regex": "href=\"(?<file>(?<id>corp\\.[\\w-]+)-(?<version>\\d+\\.\\d+\\.\\d+(?:-[\\w.]+)?)\\.vsix)\"",
+      },
+      "download": { "url": "https://files.corp.example/vscode/${file}" },
+      "ca": "~/certs/corp-root-ca.pem",
+    },
+
+    // Artifactory storage API.
+    "artifactory": {
+      "type": "http",
+      "index": {
+        "url": "https://artifactory.corp.example/artifactory/api/storage/vscode-local/extensions",
+      },
+      "auth": { "bearer": "${secret:artifactory}" },
+      "match": {
+        "jsonPath": "$.children[*]",
+        "where": { "folder": "false" },
+        "field": "uri",
+        "regex": "^/(?<file>(?<id>corp\\.[\\w-]+)-(?<version>\\d+\\.\\d+\\.\\d+)\\.vsix)$",
+      },
+      "download": {
+        "url": "https://artifactory.corp.example/artifactory/vscode-local/extensions/${file}",
+      },
+    },
+
+    // GitLab generic package registry: one package per extension.
+    "gitlab-linter": {
+      "type": "http",
+      "index": {
+        "url": "https://gitlab.corp.example/api/v4/projects/1234/packages?package_type=generic&package_name=corp.linter&order_by=version&sort=desc",
+        "headers": { "PRIVATE-TOKEN": "${secret:gitlab}" },
+      },
+      "match": { "jsonPath": "$[*]", "where": { "status": "default" }, "id": "corp.linter" },
+      "download": {
+        "url": "https://gitlab.corp.example/api/v4/projects/1234/packages/generic/corp.linter/${version}/corp.linter-${version}.vsix",
+        "headers": { "PRIVATE-TOKEN": "${secret:gitlab}" },
+      },
+    },
+  },
+}

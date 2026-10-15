@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.0 (unreleased)
+
+Milestone M3: HTTP sources.
+
+- `http` source: index request → regex or JSONPath matcher (with parent fields, `where`
+  filters) → download request, for Jenkins, directory listings, Artifactory, GitLab and Gitea.
+- Basic and bearer auth, `${secret:NAME}` credentials via the new _Store Credential…_ command,
+  `ca` for internal certificate authorities, `strictSSL: false` with a visible warning.
+- Release notes from a URL are fetched with the source's credentials.
+- _Test Source_ shows the HTTP status, the start of the body, every match with its groups and
+  the resolved download URLs.
+- Extensions without a display name from their source use the installed extension's name.
+- Docs: `docs/sources/http.md`, `docs/configuration.md`, `examples/settings/http.jsonc`.
+
 ## 0.2.0 (unreleased)
 
 Milestone M2: visibility.

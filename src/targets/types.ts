@@ -8,6 +8,8 @@ export interface Target {
   readonly kind: ArtifactKind;
   /** The installed version, or undefined if the artifact is not installed. */
   getInstalledVersion(id: string): string | undefined;
+  /** Human-readable name of an installed artifact, if the target knows one. */
+  getDisplayName?(id: string): string | undefined;
   /** Installs a downloaded artifact (a file or directory path). */
   install(downloadedPath: string, id: string, version: string): Promise<void>;
 }

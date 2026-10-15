@@ -6,12 +6,20 @@
  * security-relevant rule "sources come only from user settings".
  */
 
+import { parseFileSource, type FileSourceConfig } from './sources/fileConfig';
+import { parseHttpSource, type HttpSourceConfig } from './sources/httpConfig';
+import {
+  isObject,
+  SourceConfigError,
+  stringList,
+  type CommonSourceConfig,
+} from './sources/sourceConfig';
 import { SOURCE_TYPES, type SourceType } from './sources/types';
-import { expandPath, findSecretNames, TemplateError, type TemplateContext } from './util/template';
+import { findSecretNames, TemplateError, type TemplateContext } from './util/template';
 import { parseRange, type Range } from './version';
 
-export const DEFAULT_FILE_PATTERN =
-  '^(?<id>[\\w-]+\\.[\\w-]+)-(?<version>\\d+\\.\\d+\\.\\d+(?:-[\\w.]+)?)\\.vsix$';
+export { DEFAULT_FILE_PATTERN, type FileSourceConfig } from './sources/fileConfig';
+export type { HttpSourceConfig } from './sources/httpConfig';
 
 export type StatusBarMode = 'always' | 'whenUpdates' | 'never';
 
@@ -30,25 +38,8 @@ export interface Settings {
   scriptEnabled: boolean;
 }
 
-interface CommonSourceConfig {
-  name: string;
-  type: SourceType;
-  /** Per-source timeout in seconds, if set. */
-  timeoutSeconds?: number;
-  include: string[];
-  exclude: string[];
-}
-
-export interface FileSourceConfig extends CommonSourceConfig {
-  type: 'file';
-  /** Absolute path after `~` and `${…}` expansion. */
-  path: string;
-  recursive: boolean;
-  filePattern: RegExp;
-}
-
 /** Union of all implemented source configs. Grows with each milestone. */
-export type SourceConfig = FileSourceConfig;
+export type SourceConfig = FileSourceConfig | HttpSourceConfig;
 
 export interface TrackingEntry {
   id: string;
@@ -85,14 +76,6 @@ function num(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
 
-function stringList(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
-}
-
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
 export function parseSettings(get: RawSettings): Settings {
   const interval = num(get('checkInterval'), 60);
   const statusBar = get('statusBar');
@@ -110,44 +93,6 @@ export function parseSettings(get: RawSettings): Settings {
     httpTimeoutSeconds: Math.max(1, num(get('http.timeout'), 30)),
     scriptTimeoutSeconds: Math.max(1, num(get('script.timeout'), 120)),
     scriptEnabled: get('script.enabled') === true,
-  };
-}
-
-class SourceConfigError extends Error {}
-
-function parseFileSource(
-  common: CommonSourceConfig,
-  raw: Record<string, unknown>,
-  ctx: TemplateContext,
-): FileSourceConfig {
-  if (typeof raw.path !== 'string' || raw.path.trim() === '') {
-    throw new SourceConfigError('"path" is required for a file source');
-  }
-  const patternText = raw.filePattern ?? DEFAULT_FILE_PATTERN;
-  if (typeof patternText !== 'string') {
-    throw new SourceConfigError('"filePattern" must be a string');
-  }
-  let filePattern: RegExp;
-  try {
-    // Case-insensitive because VS Code extension IDs are, and shares often live on Windows.
-    filePattern = new RegExp(patternText, 'i');
-  } catch (err) {
-    throw new SourceConfigError(`"filePattern" is not a valid regex: ${(err as Error).message}`);
-  }
-  // Every match must name the extension and its version. Probe with a dummy match to check
-  // the groups exist without having to parse the regex ourselves.
-  const groupNames = new RegExp(`${patternText}|(?<__probe>)`, 'i').exec('')?.groups ?? {};
-  for (const g of ['id', 'version']) {
-    if (!(g in groupNames)) {
-      throw new SourceConfigError(`"filePattern" must contain a named group (?<${g}>…)`);
-    }
-  }
-  return {
-    ...common,
-    type: 'file',
-    path: expandPath(raw.path, ctx),
-    recursive: raw.recursive === true,
-    filePattern,
   };
 }
 
@@ -177,6 +122,8 @@ function parseSource(name: string, raw: unknown, ctx: TemplateContext): SourceCo
   switch (type) {
     case 'file':
       return parseFileSource(common, raw, ctx);
+    case 'http':
+      return parseHttpSource(common, raw, ctx);
     default:
       throw new SourceConfigError(
         `source type "${type}" is not supported by this version of Leuchtturm yet`,

@@ -56,4 +56,12 @@ export interface Source {
     targetDir: string,
     token: CancellationToken,
   ): Promise<string>;
+  /** Fetches release notes that are only available by URL (needs the source's auth). */
+  fetchReleaseNotes?(
+    artifact: Artifact,
+    version: AvailableVersion,
+    token: CancellationToken,
+  ): Promise<string | undefined>;
+  /** Configuration warnings shown in the log and in tooltips (e.g. TLS checks disabled). */
+  readonly warnings?: readonly string[];
 }

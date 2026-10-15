@@ -103,3 +103,14 @@ export function findSecretNames(...templates: string[]): string[] {
   }
   return [...names];
 }
+
+/** All variable names used in the given strings (`env:X`, `secret:Y`, `ref.z`, `id`, …). */
+export function findVariableNames(...templates: string[]): string[] {
+  const names = new Set<string>();
+  for (const t of templates) {
+    for (const m of t.matchAll(VAR_RE)) {
+      names.add((m[1] ?? '').trim());
+    }
+  }
+  return [...names];
+}

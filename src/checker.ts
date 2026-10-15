@@ -22,6 +22,8 @@ export interface SourceResult {
   type: SourceType;
   artifacts: Artifact[];
   error?: string;
+  /** Configuration warnings of the source (e.g. TLS verification off). */
+  warnings?: readonly string[];
   durationMs: number;
 }
 
@@ -62,6 +64,7 @@ export async function listAll(
           type: source.type,
           artifacts: [],
           error: errorMessage(err),
+          warnings: source.warnings,
           durationMs: Date.now() - start,
         };
       }
@@ -109,6 +112,8 @@ export interface CheckState {
   checkedAt: number;
   artifacts: ArtifactState[];
   problems: Problem[];
+  /** Warnings per source name, shown in tooltips. */
+  sourceWarnings: Record<string, readonly string[]>;
 }
 
 export interface ComputeInput {
@@ -118,6 +123,8 @@ export interface ComputeInput {
   trackAllFromSources: boolean;
   includePrerelease: boolean;
   installedVersion: (id: string) => string | undefined;
+  /** Fallback display name for artifacts whose sources report none (e.g. installed name). */
+  displayName?: (id: string) => string | undefined;
   isSkipped: (id: string, version: string) => boolean;
   configProblems?: readonly ConfigProblem[];
   now?: number;
@@ -227,7 +234,9 @@ export function computeState(input: ComputeInput): CheckState {
     }
     artifacts.push({
       id: latest.artifact.id,
-      displayName: candidates.find((c) => c.artifact.displayName)?.artifact.displayName,
+      displayName:
+        candidates.find((c) => c.artifact.displayName)?.artifact.displayName ??
+        input.displayName?.(latest.artifact.id),
       kind: latest.artifact.kind,
       installedVersion,
       status,
@@ -238,5 +247,11 @@ export function computeState(input: ComputeInput): CheckState {
   }
 
   artifacts.sort((a, b) => (a.displayName ?? a.id).localeCompare(b.displayName ?? b.id));
-  return { checkedAt: input.now ?? Date.now(), artifacts, problems };
+  const sourceWarnings: Record<string, readonly string[]> = {};
+  for (const r of input.results) {
+    if (r.warnings?.length) {
+      sourceWarnings[r.source] = r.warnings;
+    }
+  }
+  return { checkedAt: input.now ?? Date.now(), artifacts, problems, sourceWarnings };
 }

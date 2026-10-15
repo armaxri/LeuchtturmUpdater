@@ -111,13 +111,18 @@ export class Controller implements vscode.Disposable {
     for (const p of config.problems) {
       this.log.warn(p.message);
     }
-    const defaultTimeout = config.settings.httpTimeoutSeconds;
+    const defaultTimeoutMs = config.settings.httpTimeoutSeconds * 1000;
+    for (const c of config.sources) {
+      if (c.type === 'http') {
+        c.sensitiveValues.forEach((v) => this.log.redactor.add(v));
+      }
+    }
     this.sources = new Map(
       config.sources.map((c) => [
         c.name,
         {
-          source: createSource(c, this.log),
-          timeoutMs: (c.timeoutSeconds ?? defaultTimeout) * 1000,
+          source: createSource(c, this.log, { timeoutMs: defaultTimeoutMs }),
+          timeoutMs: c.timeoutSeconds ? c.timeoutSeconds * 1000 : defaultTimeoutMs,
           include: c.include,
           exclude: c.exclude,
         },
@@ -247,6 +252,7 @@ export class Controller implements vscode.Disposable {
       trackAllFromSources: config.settings.trackAllFromSources,
       includePrerelease: config.settings.includePrerelease,
       installedVersion: (id) => this.target.getInstalledVersion(id),
+      displayName: (id) => this.target.getDisplayName?.(id),
       isSkipped: (id, version) => this.store.isSkipped(id, version),
       configProblems: config.problems,
       now: this.store.cache?.checkedAt,
@@ -478,10 +484,26 @@ export class Controller implements vscode.Disposable {
     return done.length;
   }
 
-  /** Shows release notes: inline text as a Markdown preview, otherwise the notes URL. */
+  /**
+   * Shows release notes as a Markdown preview: inline text, or text fetched by the source
+   * (with its credentials). Falls back to opening the notes URL in the browser.
+   */
   async showReleaseNotes(candidate: Candidate): Promise<void> {
-    const { releaseNotes, releaseNotesUrl } = candidate.available;
-    const name = candidate.artifact.displayName ?? candidate.artifact.id;
+    const { releaseNotesUrl } = candidate.available;
+    let releaseNotes = candidate.available.releaseNotes;
+    const name = label(this.findArtifact(candidate.artifact.id) ?? candidate.artifact);
+    const source = this.sources.get(candidate.sourceName)?.source;
+    if (!releaseNotes && releaseNotesUrl && source?.fetchReleaseNotes) {
+      try {
+        releaseNotes = await source.fetchReleaseNotes(
+          candidate.artifact,
+          candidate.available,
+          NEVER_CANCELLED,
+        );
+      } catch (err) {
+        this.log.warn(`Release notes from ${releaseNotesUrl}: ${errorMessage(err)}`);
+      }
+    }
     if (releaseNotes) {
       const doc = await vscode.workspace.openTextDocument({
         language: 'markdown',
@@ -495,6 +517,63 @@ export class Controller implements vscode.Disposable {
         `Leuchtturm: no release notes for ${name} ${candidate.version}.`,
       );
     }
+  }
+
+  /**
+   * Stores a credential for `${secret:NAME}` in VS Code's SecretStorage (encrypted by the OS
+   * keychain). Arguments skip the prompts (tests). An empty value deletes the secret.
+   */
+  async setSecret(name?: string, value?: string): Promise<boolean> {
+    if (!name) {
+      const referenced = referencedSecrets(readRawSettings()('sources'));
+      const items = await Promise.all(
+        referenced.map(async (n) => ({
+          label: n,
+          description: (await this.secrets.get(secretStorageKey(n))) ? 'stored' : 'not stored',
+        })),
+      );
+      const OTHER = 'Another name…';
+      const picked = await vscode.window.showQuickPick(
+        [...items, { label: OTHER, description: '' }],
+        {
+          title: 'Leuchtturm: Store Credential',
+          placeHolder: 'Which ${secret:NAME} do you want to set?',
+        },
+      );
+      name =
+        picked?.label === OTHER
+          ? await vscode.window.showInputBox({
+              title: 'Leuchtturm: Store Credential',
+              prompt: 'Name used as ${secret:NAME} in leuchtturm.sources',
+              validateInput: (v) =>
+                /^[\w.-]+$/.test(v) ? undefined : 'Letters, digits, _ . - only',
+            })
+          : picked?.label;
+      if (!name) {
+        return false;
+      }
+    }
+    if (value === undefined) {
+      value = await vscode.window.showInputBox({
+        title: `Leuchtturm: Store Credential "${name}"`,
+        prompt: "Stored encrypted in VS Code's secret storage. Leave empty to delete it.",
+        password: true,
+        ignoreFocusOut: true,
+      });
+      if (value === undefined) {
+        return false;
+      }
+    }
+    if (value === '') {
+      await this.secrets.delete(secretStorageKey(name));
+      this.log.info(`Deleted secret "${name}"`);
+    } else {
+      this.log.redactor.add(value);
+      await this.secrets.store(secretStorageKey(name), value);
+      this.log.info(`Stored secret "${name}"`);
+    }
+    await this.check({ manual: false });
+    return true;
   }
 
   /**
@@ -530,6 +609,9 @@ export class Controller implements vscode.Disposable {
     } else {
       const { source, timeoutMs, include, exclude } = entry;
       out(`Type: ${source.type}, timeout: ${timeoutMs / 1000} s`);
+      for (const w of source.warnings ?? []) {
+        out(`WARNING: ${w}`);
+      }
       if (include.length || exclude.length) {
         out(`Filters: include ${JSON.stringify(include)}, exclude ${JSON.stringify(exclude)}`);
       }

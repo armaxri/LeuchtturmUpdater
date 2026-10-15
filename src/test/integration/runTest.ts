@@ -49,19 +49,23 @@ async function main(): Promise<void> {
       }
     }
 
-    await runTests({
-      vscodeExecutablePath,
-      extensionDevelopmentPath: ROOT,
-      extensionTestsPath: path.join(__dirname, 'suite', 'index.js'),
-      launchArgs: [
-        scenario.workspace,
-        ...profile,
-        '--disable-workspace-trust',
-        '--skip-welcome',
-        '--skip-release-notes',
-      ],
-      extensionTestsEnv: { LEUCHTTURM_IT_EXTENSIONS_DIR: scenario.extensionsDir },
-    });
+    try {
+      await runTests({
+        vscodeExecutablePath,
+        extensionDevelopmentPath: ROOT,
+        extensionTestsPath: path.join(__dirname, 'suite', 'index.js'),
+        launchArgs: [
+          scenario.workspace,
+          ...profile,
+          '--disable-workspace-trust',
+          '--skip-welcome',
+          '--skip-release-notes',
+        ],
+        extensionTestsEnv: { LEUCHTTURM_IT_EXTENSIONS_DIR: scenario.extensionsDir },
+      });
+    } finally {
+      await scenario.close();
+    }
   } finally {
     await fs.rm(tmp, { recursive: true, force: true });
   }

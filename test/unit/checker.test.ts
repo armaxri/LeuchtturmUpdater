@@ -122,6 +122,15 @@ describe('computeState', () => {
     });
   });
 
+  it('falls back to the installed display name when sources report none', () => {
+    const state = compute({
+      results: [result('a', { ...artifact('corp.linter', '1.4.1'), displayName: undefined })],
+      installedVersion,
+      displayName: (id) => (id === 'corp.linter' ? 'Corp Linter' : undefined),
+    });
+    expect(state.artifacts[0]!.displayName).toBe('Corp Linter');
+  });
+
   it('marks skipped versions', () => {
     const state = compute({
       results: [result('a', artifact('corp.linter', '1.4.1'))],

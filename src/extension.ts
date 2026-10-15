@@ -154,6 +154,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<Leucht
     command('leuchtturm.clearSkipped', () => controller.clearSkipped()),
     command('leuchtturm.showLog', () => channel.show()),
     command('leuchtturm.testSource', (name?: string) => controller.testSource(name)),
+    command('leuchtturm.setSecret', (name?: string, value?: string) =>
+      controller.setSecret(name, value),
+    ),
     command('leuchtturm.openSettings', () =>
       vscode.commands.executeCommand(
         'workbench.action.openSettings',

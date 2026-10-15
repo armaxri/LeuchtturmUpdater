@@ -6,8 +6,8 @@ click _Update_. It never installs anything on its own.
 
 It uses only public VS Code APIs and does not touch VS Code's marketplace configuration.
 
-> Status: milestone M2. The `file` source, the sidebar, the status bar and multi-window
-> scheduling work; the `npm`, `http` and `script` sources follow. See
+> Status: milestone M3. The `file` and `http` sources, the sidebar, the status bar and
+> multi-window scheduling work; the `npm` and `script` sources follow. See
 > [`docs/SPEC.md`](docs/SPEC.md).
 
 ## Quick start (file share)
@@ -57,7 +57,11 @@ Sources are read from user settings only. A `leuchtturm.sources` entry in a work
 ## Source types
 
 - [`file`](docs/sources/file.md): folder or network share with `.vsix` files.
-- `npm`, `http`, `script`: coming in later milestones.
+- [`http`](docs/sources/http.md): Jenkins, web server listings, Artifactory, GitLab/Gitea
+  packages, or any page that lists versions; regex or JSONPath matching, credentials, custom CAs.
+- `npm`, `script`: coming in later milestones.
+
+All settings, variables and secrets: [`docs/configuration.md`](docs/configuration.md).
 
 ## Remote development
 

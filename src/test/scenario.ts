@@ -12,13 +12,22 @@
  *                                                  must never show up
  *   workspace/.vscode/settings.json               → tries to inject the evil source
  *   user-data/User/settings.json                  → the real (user-level) configuration
+ *
+ * Plus two local servers (see fakeServer.ts), running while the scenario is open:
+ *   fake Jenkins (http, basic auth with ${secret:jenkins-demo}, jsonPath matcher)
+ *     job demo-ci: #42 leuchtturm-demo.ci 2.1.0 (+ CHANGELOG.md), #41 2.0.0 ← pre-installed,
+ *     #40 failed
+ *   web server listing over HTTPS with the test CA (regex matcher)
+ *     /vsix/leuchtturm-demo.web-0.3.0.vsix        → not installed
  */
 
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
+import { startFakeServer, type FakeServer } from './fakeServer';
 import { packageFixture, ROOT } from './packageFixture';
+import { TLS_CERT } from './paths';
 
 const DEMO = path.join(ROOT, 'test/fixtures/demo-extension');
 
@@ -27,7 +36,12 @@ export const IDS = {
   world: 'leuchtturm-demo.world',
   tampered: 'leuchtturm-demo.tampered',
   evil: 'leuchtturm-demo.evil',
+  ci: 'leuchtturm-demo.ci',
+  web: 'leuchtturm-demo.web',
 } as const;
+
+/** The fake Jenkins expects this; the user stores it with "Store Credential…". */
+export const JENKINS_SECRET = { name: 'jenkins-demo', value: 'demo-password' } as const;
 
 export interface Scenario {
   root: string;
@@ -37,6 +51,10 @@ export interface Scenario {
   extensionsDir: string;
   /** VSIX files to install before starting VS Code. */
   preinstall: string[];
+  jenkinsUrl: string;
+  webUrl: string;
+  /** Stops the fake servers. */
+  close(): Promise<void>;
 }
 
 /** Packages the demo extension under another name (with matching command IDs). */
@@ -115,6 +133,38 @@ export async function buildScenario(
     path.join(evilShare, `${IDS.evil}-6.6.6.vsix`),
   );
 
+  const ci = (v: string) => path.join(root, 'ci-builds', `${IDS.ci}-${v}.vsix`);
+  await demo('ci', 'Leuchtturm Demo CI', '2.0.0', ci('2.0.0'));
+  await demo('ci', 'Leuchtturm Demo CI', '2.1.0', ci('2.1.0'));
+  const webDir = path.join(root, 'web');
+  await demo('web', 'Leuchtturm Demo Web', '0.3.0', path.join(webDir, `${IDS.web}-0.3.0.vsix`));
+
+  const servers: FakeServer[] = [
+    await startFakeServer({
+      auth: { user: 'demo', password: JENKINS_SECRET.value },
+      jenkins: {
+        job: 'demo-ci',
+        builds: [
+          {
+            number: 42,
+            result: 'SUCCESS',
+            artifacts: { [`dist/${IDS.ci}-2.1.0.vsix`]: ci('2.1.0') },
+            changelog:
+              '## 2.1.0\n- Built by the fake Jenkins\n- Fetched with your stored credential\n',
+          },
+          {
+            number: 41,
+            result: 'SUCCESS',
+            artifacts: { [`dist/${IDS.ci}-2.0.0.vsix`]: ci('2.0.0') },
+          },
+          { number: 40, result: 'FAILURE', artifacts: {} },
+        ],
+      },
+    }),
+    await startFakeServer({ tls: true, autoindex: { dir: webDir } }),
+  ];
+  const [jenkins, web] = servers as [FakeServer, FakeServer];
+
   // Workspace settings try to add a source. Leuchtturm must ignore it (SPEC §9).
   await fs.mkdir(path.join(workspace, '.vscode'), { recursive: true });
   await fs.writeFile(
@@ -137,6 +187,31 @@ export async function buildScenario(
     'leuchtturm.sources': {
       share: { type: 'file', path: share },
       offline: { type: 'file', path: path.join(root, 'does-not-exist'), timeout: 5 },
+      jenkins: {
+        type: 'http',
+        index: {
+          url: `${jenkins.url}/job/demo-ci/api/json?tree=builds[number,result,artifacts[fileName,relativePath]]{0,20}`,
+        },
+        auth: { basic: { user: 'demo', password: `\${secret:${JENKINS_SECRET.name}}` } },
+        match: {
+          jsonPath: '$.builds[*].artifacts[*]',
+          where: { result: 'SUCCESS' },
+          field: 'fileName',
+          regex: '^(?<id>leuchtturm-demo\\.[\\w-]+)-(?<version>\\d+\\.\\d+\\.\\d+)\\.vsix$',
+        },
+        download: { url: `${jenkins.url}/job/demo-ci/\${number}/artifact/\${relativePath}` },
+        releaseNotes: { url: `${jenkins.url}/job/demo-ci/\${number}/artifact/CHANGELOG.md` },
+      },
+      web: {
+        type: 'http',
+        index: { url: `${web.url}/vsix/` },
+        match: {
+          regex:
+            'href="(?<file>(?<id>leuchtturm-demo\\.[\\w-]+)-(?<version>\\d+\\.\\d+\\.\\d+)\\.vsix)"',
+        },
+        download: { url: `${web.url}/vsix/\${file}` },
+        ca: TLS_CERT,
+      },
     },
     'leuchtturm.trackAllFromSources': true,
     'leuchtturm.checkOnStartup': true,
@@ -158,5 +233,17 @@ export async function buildScenario(
     JSON.stringify(userSettings, null, 2),
   );
 
-  return { root, share, workspace, userDataDir, extensionsDir, preinstall: [hello('1.0.0')] };
+  return {
+    root,
+    share,
+    workspace,
+    userDataDir,
+    extensionsDir,
+    preinstall: [hello('1.0.0'), ci('2.0.0')],
+    jenkinsUrl: jenkins.url,
+    webUrl: web.url,
+    close: async () => {
+      await Promise.all(servers.map((s) => s.close()));
+    },
+  };
 }

@@ -13,7 +13,8 @@ function themeIcon(id: string, color?: string): vscode.ThemeIcon {
   return new vscode.ThemeIcon(id, color ? new vscode.ThemeColor(color) : undefined);
 }
 
-function tooltip(a: ArtifactState, checkedAt: number): vscode.MarkdownString {
+function tooltip(a: ArtifactState, state: CheckState | undefined): vscode.MarkdownString {
+  const checkedAt = state?.checkedAt ?? Date.now();
   const md = new vscode.MarkdownString(undefined, true);
   md.appendMarkdown(`**${label(a)}**  \n`);
   md.appendText(a.id);
@@ -31,6 +32,10 @@ function tooltip(a: ArtifactState, checkedAt: number): vscode.MarkdownString {
     md.appendMarkdown(`Pinned to \`${a.pin}\`  \n`);
   }
   md.appendMarkdown(`Last check: ${new Date(checkedAt).toLocaleString()}`);
+  for (const w of (a.latest && state?.sourceWarnings[a.latest.sourceName]) || []) {
+    md.appendMarkdown('  \n$(warning) ');
+    md.appendText(w);
+  }
   const notes = a.latest?.available.releaseNotes;
   if (notes) {
     md.appendMarkdown('\n\n---\n\n');
@@ -114,7 +119,7 @@ export class LeuchtturmTreeProvider implements vscode.TreeDataProvider<Node> {
             item.iconPath = themeIcon('extensions');
             break;
         }
-        item.tooltip = tooltip(a, this.state?.checkedAt ?? Date.now());
+        item.tooltip = tooltip(a, this.state);
         item.contextValue = `artifact.${a.status}${a.latest?.available.releaseNotes || a.latest?.available.releaseNotesUrl ? '.notes' : ''}`;
         return item;
       }

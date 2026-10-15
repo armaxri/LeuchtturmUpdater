@@ -2,7 +2,7 @@
   "name": "leuchtturm-updater",
   "displayName": "Leuchtturm Updater",
   "description": "Keeps privately distributed VS Code extensions up to date from file shares, npm registries, Jenkins or custom scripts.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "armaxri",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -46,19 +46,25 @@
       },
       {
         "command": "leuchtturm.update",
-        "title": "Update Extension\u2026",
+        "title": "Update Extension…",
         "category": "Leuchtturm"
       },
       {
         "command": "leuchtturm.installVersion",
-        "title": "Install Specific Version\u2026",
+        "title": "Install Specific Version…",
         "category": "Leuchtturm"
       },
       {
         "command": "leuchtturm.testSource",
-        "title": "Test Source\u2026",
+        "title": "Test Source…",
         "category": "Leuchtturm",
         "icon": "$(beaker)"
+      },
+      {
+        "command": "leuchtturm.setSecret",
+        "title": "Store Credential…",
+        "category": "Leuchtturm",
+        "icon": "$(key)"
       },
       {
         "command": "leuchtturm.clearSkipped",
@@ -192,6 +198,139 @@
               "filePattern": {
                 "type": "string",
                 "description": "(file) Regex for VSIX file names with named groups \"id\" and \"version\"."
+              },
+              "index": {
+                "type": "object",
+                "required": [
+                  "url"
+                ],
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "description": "URL. Supports ${env:NAME}, ${secret:NAME} and, for downloads, matched groups such as ${version}."
+                  },
+                  "method": {
+                    "type": "string",
+                    "enum": [
+                      "GET",
+                      "POST",
+                      "HEAD"
+                    ],
+                    "default": "GET"
+                  },
+                  "headers": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "body": {
+                    "type": "string"
+                  }
+                },
+                "description": "(http) Step 1: the request that lists available versions."
+              },
+              "match": {
+                "type": "object",
+                "description": "(http) Step 2: how to find versions in the index response.",
+                "properties": {
+                  "regex": {
+                    "type": "string",
+                    "description": "Regex with named groups; \"version\" and \"id\" (unless \"id\" is set) are required. All matches are collected."
+                  },
+                  "flags": {
+                    "type": "string",
+                    "default": "g"
+                  },
+                  "jsonPath": {
+                    "type": "string",
+                    "description": "Select items in a JSON response, e.g. \"$.builds[*].artifacts[*]\". Fields of the item and its parents become groups."
+                  },
+                  "field": {
+                    "type": "string",
+                    "description": "jsonPath mode: field the regex runs on."
+                  },
+                  "where": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "description": "Only keep matches whose groups/fields have these values, e.g. { \"result\": \"SUCCESS\" }."
+                  },
+                  "id": {
+                    "type": "string",
+                    "description": "Fixed extension ID when the response does not contain one."
+                  }
+                }
+              },
+              "download": {
+                "type": "object",
+                "required": [
+                  "url"
+                ],
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "description": "URL. Supports ${env:NAME}, ${secret:NAME} and, for downloads, matched groups such as ${version}."
+                  },
+                  "method": {
+                    "type": "string",
+                    "enum": [
+                      "GET",
+                      "POST",
+                      "HEAD"
+                    ],
+                    "default": "GET"
+                  },
+                  "headers": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "body": {
+                    "type": "string"
+                  }
+                },
+                "description": "(http) Step 3: the download request. All matched groups, ${id} and ${version} are available."
+              },
+              "releaseNotes": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string"
+                  }
+                },
+                "description": "(http) Optional release notes URL template."
+              },
+              "auth": {
+                "type": "object",
+                "description": "(http) Credentials for all requests of this source.",
+                "properties": {
+                  "basic": {
+                    "type": "object",
+                    "properties": {
+                      "user": {
+                        "type": "string"
+                      },
+                      "password": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "bearer": {
+                    "type": "string"
+                  }
+                }
+              },
+              "strictSSL": {
+                "type": "boolean",
+                "default": true,
+                "description": "(http) Set to false only for servers with a broken TLS setup. Prefer \"ca\"."
+              },
+              "ca": {
+                "type": "string",
+                "description": "(http) Path to an extra trusted CA certificate (PEM)."
               }
             }
           }
@@ -283,7 +422,7 @@
       {
         "view": "leuchtturm.updates",
         "when": "!leuchtturm.noSources",
-        "contents": "Nothing to show yet. Leuchtturm tracks installed extensions that your sources offer; set \"leuchtturm.trackAllFromSources\" to list everything.\n[Check for Updates](command:leuchtturm.checkNow)\n[Test Source\u2026](command:leuchtturm.testSource)"
+        "contents": "Nothing to show yet. Leuchtturm tracks installed extensions that your sources offer; set \"leuchtturm.trackAllFromSources\" to list everything.\n[Check for Updates](command:leuchtturm.checkNow)\n[Test Source…](command:leuchtturm.testSource)"
       }
     ],
     "menus": {
@@ -317,6 +456,11 @@
           "command": "leuchtturm.clearSkipped",
           "when": "view == leuchtturm.updates",
           "group": "more@2"
+        },
+        {
+          "command": "leuchtturm.setSecret",
+          "when": "view == leuchtturm.updates",
+          "group": "more@3"
         }
       ],
       "view/item/context": [

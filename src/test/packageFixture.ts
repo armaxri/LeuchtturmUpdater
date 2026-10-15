@@ -6,7 +6,7 @@ import * as path from 'node:path';
 
 import { createVSIX } from '@vscode/vsce';
 
-export const ROOT = path.resolve(__dirname, '../..');
+export { ROOT } from './paths';
 
 /**
  * Copies `fixtureDir` to a temp folder, overrides `package.json` fields (at least `version`),

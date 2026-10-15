@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { assert, describe, expect, it } from 'vitest';
 
 import { parseConfig, parseSettings, referencedSecrets } from '../../src/config';
 import { settings } from './helpers';
@@ -48,6 +48,7 @@ describe('parseConfig sources', () => {
       include: [],
       exclude: [],
     });
+    assert(share.type === 'file');
     expect(share.filePattern.exec('corp.my-linter-1.4.1.vsix')?.groups).toMatchObject({
       id: 'corp.my-linter',
       version: '1.4.1',
