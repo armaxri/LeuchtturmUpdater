@@ -103,7 +103,7 @@ npm run lint              # eslint + prettier + tsc
 npm run sandbox           # open a demo VS Code window (isolated profile, demo share)
 npm run sandbox -- --dev-container  # the same, inside a dev container (needs Docker)
 npm run screenshots       # re-render docs/images/*.png from the demo scenario
-npx vsce package          # build the .vsix
+npm run package           # build the .vsix and check its README images
 ```
 
 `npm run sandbox` rebuilds `.sandbox/` from scratch, with a fake share holding demo extensions

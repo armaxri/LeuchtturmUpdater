@@ -30,7 +30,8 @@ jobs:
       - name: UI test (source editor, Linux only)
         if: runner.os == 'Linux'
         run: xvfb-run -a npm run test:ui
-      - run: npx vsce package
+      # Also checks that the README images will show on the extension page.
+      - run: npm run package
       - uses: actions/upload-artifact@v4
         if: runner.os == 'Linux'
         with:

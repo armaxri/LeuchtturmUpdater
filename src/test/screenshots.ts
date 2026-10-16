@@ -11,7 +11,7 @@ import * as path from 'node:path';
 import type { Page } from 'playwright-core';
 
 import { activeWebview, launchWorkbench, runCommand } from './electron';
-import { ROOT } from './paths';
+import { removeTempDir, ROOT } from './paths';
 import { buildScenario, IDS } from './scenario';
 
 const OUT = path.join(ROOT, 'docs/images');
@@ -103,7 +103,7 @@ async function main(): Promise<void> {
     console.log(`Screenshots written to ${path.relative(ROOT, OUT)}/`);
   } finally {
     await scenario.close();
-    await fs.rm(tmp, { recursive: true, force: true });
+    await removeTempDir(tmp);
   }
 }
 

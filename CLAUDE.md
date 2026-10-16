@@ -31,7 +31,7 @@ the milestones in §12 of the spec in order, and keep each milestone shippable (
 - `npm run test:remote`: the demo scenario in a real Dev Containers window (needs Docker)
 - `npm run test:ui`: Playwright clicks through webviews (the source editor) in the test VS Code
 - `npm run sandbox`: open a demo VS Code window (isolated profile, demo share); `-- --no-launch` only prepares it, `-- --dev-container` opens it inside a dev container
-- `npx vsce package`: produce the `.vsix`
+- `npm run package`: produce the `.vsix` and check that the README images will show (VS Code's extension page only loads public `https` images; vsce points relative links at the public GitHub repo, so images appear once they are pushed)
 
 ## User-friendly testing (sandbox + scenario)
 The owner does not do manual test setups. Every feature that is visible to the user must be

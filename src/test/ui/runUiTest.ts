@@ -12,6 +12,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { activeWebview, launchWorkbench, runCommand } from '../electron';
+import { removeTempDir } from '../paths';
 import { buildScenario, JENKINS_SECRET } from '../scenario';
 
 const step = (text: string) => console.log(`- ${text}`); // eslint-disable-line no-console
@@ -160,7 +161,7 @@ async function main(): Promise<void> {
     process.exitCode = 0;
   } finally {
     await scenario.close();
-    await fs.rm(tmp, { recursive: true, force: true });
+    await removeTempDir(tmp);
   }
 }
 

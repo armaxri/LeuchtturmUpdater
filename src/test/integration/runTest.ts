@@ -18,6 +18,7 @@ import {
 } from '@vscode/test-electron';
 
 import { ROOT } from '../packageFixture';
+import { removeTempDir } from '../paths';
 import { buildScenario } from '../scenario';
 
 async function main(): Promise<void> {
@@ -78,7 +79,7 @@ async function main(): Promise<void> {
       await scenario.close();
     }
   } finally {
-    await fs.rm(tmp, { recursive: true, force: true });
+    await removeTempDir(tmp);
   }
   process.exitCode = 0;
 }
