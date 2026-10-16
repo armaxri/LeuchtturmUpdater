@@ -1,0 +1,7 @@
+# LF everywhere, also in Windows checkouts: Prettier, shell scripts and the Python
+# examples all expect it.
+* text=auto eol=lf
+
+*.png binary
+*.vsix binary
+*.tgz binary
