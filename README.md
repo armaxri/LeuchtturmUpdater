@@ -8,42 +8,44 @@ It uses only public VS Code APIs and does not touch VS Code's marketplace config
 
 ![The Leuchtturm view: updates, extensions available to install, and a problem](docs/images/sidebar.png)
 
-## Quick start (file share)
+## Quick start
 
-1. Put your `.vsix` files in a folder or on a share, named as `vsce package` names them:
-   `corp.linter-1.4.1.vsix`.
-2. Open the Leuchtturm view and click **+** (_Add Source…_). Pick _File share or folder_,
-   enter the folder and save. The form checks every field as you type, and **Test** shows what
-   the source finds before you rely on it.
+1. Open the Leuchtturm view and click **+** (_Add Source…_).
+2. Paste the link where you download the extension today: a Jenkins job or its _Last
+   Successful Artifacts_ page, a web page that lists `.vsix` files, or a single `.vsix` link.
+   A folder or network share works too (_Choose Folder…_), and so does an npm package name.
+3. Leuchtturm shows the extensions and versions it found there. Check the list, keep or change
+   the name, and click **Save**. No regex, no JSON.
 
-   ![The source editor](docs/images/source-editor.png)
+   ![Adding a source from a Jenkins link](docs/images/source-editor.png)
 
-   The form writes to your user settings. You can also edit them directly
-   (_Preferences: Open User Settings (JSON)_):
-
-   ```jsonc
-   "leuchtturm.sources": {
-     "share": { "type": "file", "path": "\\\\fileserver\\vscode-extensions" }
-   }
-   ```
-
-3. Run _Leuchtturm: Check for Updates_. Every installed extension that the share offers is
+4. Run _Leuchtturm: Check for Updates_. Every installed extension that the share offers is
    now tracked. When a newer version shows up, Leuchtturm notifies you; _Show Updates_ lets you
    pick what to install.
 
-Sources are read from user settings only. A `leuchtturm.sources` entry in a workspace's
-`.vscode/settings.json` is ignored, so a cloned repository cannot add download locations.
+Sources are stored in your user settings (`leuchtturm.sources`), which you can also edit by
+hand; _Manage Sources_ opens a detailed form for each one. A `leuchtturm.sources` entry in a
+workspace's `.vscode/settings.json` is ignored, so a cloned repository cannot add download
+locations.
+
+The `.vsix` file names need a version, as `vsce package` names them: `corp.linter-1.4.1.vsix`.
+
+**Servers that need a login:** Leuchtturm handles no passwords or tokens. Use a
+[`script` source](docs/sources/script.md): a small program (from your company, or adapted from
+the examples) that signs in and downloads, which Leuchtturm runs. npm registries work with
+whatever login npm itself has.
 
 ## Commands
 
-| Command                                  | What it does                                                           |
-| ---------------------------------------- | ---------------------------------------------------------------------- |
-| Leuchtturm: Check for Updates            | Checks all sources now.                                                |
-| Leuchtturm: Add Source… / Manage Sources | Opens the source editor: a form per source, with validation and Test.  |
-| Leuchtturm: Update Extension…            | Pick from the available updates and install them.                      |
-| Leuchtturm: Install Specific Version…    | Install any offered version, including downgrades (with confirmation). |
-| Leuchtturm: Reset Skipped Versions       | Forget versions skipped from a notification.                           |
-| Leuchtturm: Show Log                     | Opens the "Leuchtturm Updater" output channel.                         |
+| Command                               | What it does                                                                       |
+| ------------------------------------- | ---------------------------------------------------------------------------------- |
+| Leuchtturm: Check for Updates         | Checks all sources now.                                                            |
+| Leuchtturm: Add Source…               | Paste a link (Jenkins, web page, folder, npm name); Leuchtturm sets up the source. |
+| Leuchtturm: Manage Sources            | A detailed form per source, with validation and Test.                              |
+| Leuchtturm: Update Extension…         | Pick from the available updates and install them.                                  |
+| Leuchtturm: Install Specific Version… | Install any offered version, including downgrades (with confirmation).             |
+| Leuchtturm: Reset Skipped Versions    | Forget versions skipped from a notification.                                       |
+| Leuchtturm: Show Log                  | Opens the "Leuchtturm Updater" output channel.                                     |
 
 ## Settings
 
@@ -63,13 +65,15 @@ Sources are read from user settings only. A `leuchtturm.sources` entry in a work
 
 - [`file`](docs/sources/file.md): folder or network share with `.vsix` files.
 - [`http`](docs/sources/http.md): Jenkins, web server listings, Artifactory, GitLab/Gitea
-  packages, or any page that lists versions; regex or JSONPath matching, credentials, custom CAs.
+  packages, or any page that lists versions (no login); regex or JSONPath matching, generated
+  for you by _Add Source_.
 - [`npm`](docs/sources/npm.md): any npm registry (Nexus, Artifactory, Verdaccio, …) with
-  packages that wrap a `.vsix`; `.npmrc` credentials, integrity checks, publishing guide.
+  packages that wrap a `.vsix`; runs your npm with your npm configuration; publishing guide.
 - [`script`](docs/sources/script.md): your own program (Python examples included) speaking a
-  small JSON protocol; off unless enabled in user settings, approved once per program.
+  small JSON protocol, also the way to servers that need a login; off unless enabled in user
+  settings, approved once per program.
 
-All settings, variables and secrets: [`docs/configuration.md`](docs/configuration.md).
+All settings and variables: [`docs/configuration.md`](docs/configuration.md).
 Safeguards and the relation to the VS Code / Marketplace terms: [`docs/security.md`](docs/security.md).
 
 ## Remote development
@@ -77,7 +81,7 @@ Safeguards and the relation to the VS Code / Marketplace terms: [`docs/security.
 Leuchtturm runs on the **local** machine (`extensionKind: ["ui"]`), where file shares and
 internal servers are usually reachable. In Dev Containers, Remote-SSH and WSL windows:
 
-- Your local user settings apply: the same sources, credentials and script approvals as in
+- Your local user settings apply: the same sources and script approvals as in
   local windows. Nothing needs to be configured inside the container.
 - Checks and downloads run locally. Installs go through VS Code's own install command, which
   puts each extension where it runs: most extensions on the remote side, UI extensions locally.

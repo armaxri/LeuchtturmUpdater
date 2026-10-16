@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
-"""Reads successful builds from the Jenkins JSON API. Shows credentials from environment
-variables and how `ref` carries the build number from listing to download.
+"""Reads successful builds from the Jenkins JSON API, for a Jenkins that needs a login.
+Shows how a script handles the login itself (Leuchtturm never sees credentials) and how
+`ref` carries the build number from listing to download.
 
-Settings (store the token with "Leuchtturm: Store Credential…"):
+The login comes from your environment: JENKINS_USER and JENKINS_TOKEN (an API token from
+your Jenkins user page). Set them where VS Code picks them up, e.g. in your shell profile.
+Or replace `credentials()` with whatever your company uses (a keyring, a token file, ...).
+
+Settings:
     "env": {
         "JENKINS_URL": "https://jenkins.corp.example",
-        "JENKINS_JOB": "corp-linter",
-        "JENKINS_USER": "ci-reader",
-        "JENKINS_TOKEN": "${secret:jenkins}"
+        "JENKINS_JOB": "corp-linter"
     }
 """
 
@@ -15,6 +18,7 @@ import base64
 import json
 import os
 import re
+import shutil
 import urllib.error
 import urllib.request
 
@@ -32,18 +36,24 @@ def config():
     return base, job
 
 
-def auth_header():
+def credentials():
+    """User name and API token, or None for a Jenkins that allows anonymous reading."""
     user, token = os.environ.get("JENKINS_USER"), os.environ.get("JENKINS_TOKEN")
-    if not user or not token:
-        return {}
-    basic = base64.b64encode(f"{user}:{token}".encode()).decode()
-    return {"Authorization": f"Basic {basic}"}
+    return (user, token) if user and token else None
+
+
+def open_url(url, timeout=30):
+    headers = {}
+    login = credentials()
+    if login:
+        basic = base64.b64encode(f"{login[0]}:{login[1]}".encode()).decode()
+        headers["Authorization"] = f"Basic {basic}"
+    return urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=timeout)
 
 
 def get(url):
-    request = urllib.request.Request(url, headers=auth_header())
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with open_url(url) as response:
             return response.read().decode("utf-8")
     except urllib.error.HTTPError as err:
         hint = " (check JENKINS_USER/JENKINS_TOKEN)" if err.code in (401, 403) else ""
@@ -78,16 +88,23 @@ def get_versions():
 def download_version(req):
     base, job = config()
     r = ref()
-    # Return the URL plus headers; Leuchtturm downloads it and masks the header in its log.
-    return {"url": f"{base}/job/{job}/{r['build']}/artifact/{r['path']}", "headers": auth_header()}
+    # The download needs the login too, so the script fetches the file itself and answers
+    # with its path.
+    url = f"{base}/job/{job}/{r['build']}/artifact/{r['path']}"
+    target = os.path.join(req.target_dir, os.path.basename(r["path"]))
+    try:
+        with open_url(url, timeout=300) as response, open(target, "wb") as out:
+            shutil.copyfileobj(response, out)
+    except urllib.error.HTTPError as err:
+        fail(f"HTTP {err.code} from Jenkins while downloading", url)
+    return {"path": target}
 
 
 def get_release_notes(req):
     base, job = config()
     url = f"{base}/job/{job}/{ref()['build']}/artifact/CHANGELOG.md"
-    request = urllib.request.Request(url, headers=auth_header())
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with open_url(url) as response:
             return response.read().decode("utf-8")
     except urllib.error.HTTPError as err:
         if err.code == 404:

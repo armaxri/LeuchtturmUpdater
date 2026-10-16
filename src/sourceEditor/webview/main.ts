@@ -1,33 +1,35 @@
 /**
  * The source editor page (runs inside the webview, a sandboxed browser frame; bundled to
- * dist/sourceEditor.js). It renders the form from formSpec.ts and talks to the extension only
- * through messages (protocol.ts): the extension validates, tests and saves.
+ * dist/sourceEditor.js). It talks to the extension only through messages (protocol.ts): the
+ * extension looks links up, validates, tests and saves.
+ *
+ * Adding a source starts from what the user has: they paste a link (a Jenkins page, a web
+ * page with .vsix links, a folder, an npm package name) and the extension proposes a working
+ * configuration. The detailed form (rendered from formSpec.ts) is there to adjust it, and to
+ * edit existing sources.
  *
  * Plain DOM code, no framework. Inputs update the draft without re-rendering, so typing never
- * loses focus; the form is rebuilt only when switching sources, types or credential modes.
+ * loses focus; the form is rebuilt only when switching between sources or views.
  */
 
 import type { SourceType } from '../../sources/types';
 import {
-  sectionsFor,
   knownPaths,
-  TYPE_LABELS,
+  sectionsFor,
   SOURCE_NAME,
-  type AuthMode,
+  TYPE_LABELS,
   type FieldSpec,
   type SectionSpec,
 } from '../formSpec';
-import type { EditorFocus, EditorState, FromWebview, ToWebview, Validation } from '../protocol';
-import {
-  authMode,
-  fromInput,
-  getPath,
-  sameSource,
-  setAuthMode,
-  setPath,
-  toText,
-  type RawSource,
-} from '../values';
+import type {
+  Discovery,
+  EditorFocus,
+  EditorState,
+  FromWebview,
+  ToWebview,
+  Validation,
+} from '../protocol';
+import { fromInput, getPath, sameSource, setPath, toText, type RawSource } from '../values';
 
 // Provided by VS Code inside webviews; it can be called only once.
 declare function acquireVsCodeApi(): { postMessage(message: FromWebview): void };
@@ -37,23 +39,20 @@ const post = (message: FromWebview): void => vscode.postMessage(message);
 const TYPES: readonly SourceType[] = ['file', 'http', 'npm', 'script'];
 const TYPE_HELP: Record<SourceType, string> = {
   file: 'A folder or network share with .vsix files.',
-  http: 'Any web page or API that lists versions: Jenkins, Artifactory, GitLab, a directory listing.',
-  npm: 'Extensions published as npm packages to your company registry.',
-  script: 'A program you write that answers in a small JSON protocol.',
-};
-const AUTH_LABELS: Record<AuthMode, string> = {
-  none: 'None',
-  basic: 'User and password',
-  bearer: 'Bearer token',
-  token: 'Token',
+  http: 'A web page or API that lists versions, with your own regex or JSONPath.',
+  npm: 'Extensions published as npm packages; uses your npm configuration.',
+  script: 'A program that lists and downloads extensions, e.g. from a server that needs a login.',
 };
 
 type View =
   | { mode: 'list' }
+  /** "Paste a link": the main way to add a source. */
+  | { mode: 'discover'; input: string; busy: boolean; result?: Discovery; name?: string }
+  /** Set up manually: pick a type, then the detailed form. */
   | { mode: 'choose' }
   | { mode: 'edit'; originalName?: string; name: string; draft: RawSource };
 
-let state: EditorState = { sources: {}, storedSecrets: [], scriptEnabled: false };
+let state: EditorState = { sources: {}, scriptEnabled: false };
 let view: View = { mode: 'list' };
 let validation: Validation | undefined;
 let requestId = 0;
@@ -126,29 +125,57 @@ function navigate(go: () => void): void {
   go();
 }
 
-function openSource(name: string): void {
-  const source = state.sources[name];
-  if (!source) {
-    view = { mode: 'list' };
-  } else {
-    view = { mode: 'edit', originalName: name, name, draft: structuredClone(source) };
-  }
+function show(next: View): void {
+  view = next;
   testOutput = undefined;
   notice = undefined;
+  pendingNavigation = undefined;
   render();
-  validate();
+  if (view.mode === 'edit') {
+    validate();
+  }
+  // Put the cursor where the user types next.
+  const focus =
+    view.mode === 'discover' && !view.result
+      ? document.getElementById('discover-input')
+      : view.mode === 'discover'
+        ? document.getElementById('discover-name')
+        : undefined;
+  focus?.focus();
+}
+
+function openSource(name: string): void {
+  const source = state.sources[name];
+  show(
+    source
+      ? { mode: 'edit', originalName: name, name, draft: structuredClone(source) }
+      : { mode: 'list' },
+  );
+}
+
+function freeName(base: string): string {
+  let name = base;
+  for (let i = 2; name in state.sources; i++) {
+    name = `${base}-${i}`;
+  }
+  return name;
 }
 
 function newSource(type: SourceType): void {
-  let name: string = type === 'file' ? 'share' : type;
-  for (let i = 2; name in state.sources; i++) {
-    name = `${type}-${i}`;
+  show({ mode: 'edit', name: freeName(type === 'file' ? 'share' : type), draft: { type } });
+}
+
+function startDiscover(input = ''): void {
+  show({ mode: 'discover', input, busy: false });
+}
+
+function runDiscover(input: string): void {
+  if (!input.trim()) {
+    return;
   }
-  view = { mode: 'edit', name, draft: { type } };
-  testOutput = undefined;
-  notice = undefined;
+  view = { mode: 'discover', input, busy: true };
   render();
-  validate();
+  post({ type: 'discover', input });
 }
 
 let validateTimer: ReturnType<typeof setTimeout> | undefined;
@@ -180,9 +207,8 @@ function updateDraft(change: (draft: RawSource) => RawSource): void {
 // --- Rendering --------------------------------------------------------------------------
 
 function render(): void {
-  const app = $('app');
   fill(
-    app,
+    $('app'),
     el(
       'div',
       { class: 'layout' },
@@ -201,23 +227,17 @@ function renderList(): void {
   }
   const items = Object.entries(state.sources).map(([name, source]) => {
     const active = view.mode === 'edit' && view.originalName === name;
-    const disabled = source.enabled === false;
-    const item = el(
-      'li',
-      {},
-      button(name, () => navigate(() => openSource(name)), {
-        class: `source${active ? ' active' : ''}`,
-        'data-source': name,
-        'aria-current': active ? 'true' : false,
-      }),
-    );
-    const b = item.firstElementChild!;
+    const b = button(name, () => navigate(() => openSource(name)), {
+      class: `source${active ? ' active' : ''}`,
+      'data-source': name,
+      'aria-current': active ? 'true' : false,
+    });
     b.append(
       el('span', { class: 'badge' }, String(source.type ?? '?')),
-      disabled ? el('span', { class: 'badge muted' }, 'off') : '',
+      source.enabled === false ? el('span', { class: 'badge muted' }, 'off') : '',
       active && isDirty() ? el('span', { class: 'dot', title: 'Unsaved changes' }, '●') : '',
     );
-    return item;
+    return el('li', {}, b);
   });
   if (view.mode === 'edit' && view.originalName === undefined) {
     items.push(
@@ -238,7 +258,7 @@ function renderList(): void {
     list,
     el('h2', {}, 'Sources'),
     items.length > 0 ? el('ul', {}, ...items) : el('p', { class: 'muted' }, 'None yet.'),
-    button('+ Add Source', () => navigate(() => ((view = { mode: 'choose' }), render())), {
+    button('+ Add Source', () => navigate(() => startDiscover()), {
       class: 'primary',
       id: 'add-source',
     }),
@@ -256,21 +276,26 @@ function renderMain(): void {
       el(
         'p',
         {},
-        'Sources tell Leuchtturm where your company publishes VS Code extensions. They are ' +
-          'stored in your user settings ("leuchtturm.sources"); workspace settings can never add one.',
+        'A source is where your team publishes VS Code extensions: a Jenkins job, a web page ' +
+          'or folder with .vsix files, or an npm registry. Leuchtturm checks your sources and ' +
+          'tells you when an update is available.',
       ),
       Object.keys(state.sources).length > 0
-        ? el('p', {}, 'Select a source on the left to edit it, or add a new one.')
+        ? el('p', {}, 'Select a source on the left to change it, or add a new one.')
         : el('p', {}, 'There are no sources yet.'),
-      button('Add Source', () => ((view = { mode: 'choose' }), render()), { class: 'primary' }),
+      button('Add Source', () => startDiscover(), { class: 'primary' }),
     );
+    return;
+  }
+  if (view.mode === 'discover') {
+    renderDiscover(main, view);
     return;
   }
   if (view.mode === 'choose') {
     fill(
       main,
-      el('h1', {}, 'Add a source'),
-      el('p', {}, 'Where are your extensions published?'),
+      el('h1', {}, 'Set up a source manually'),
+      el('p', {}, 'For experts: pick a type and fill in every detail yourself.'),
       el(
         'div',
         { class: 'cards' },
@@ -280,11 +305,204 @@ function renderMain(): void {
           return card;
         }),
       ),
-      button('Cancel', () => ((view = { mode: 'list' }), render())),
+      button('Back', () => startDiscover()),
     );
     return;
   }
+  renderEdit(main);
+}
 
+/** "Paste a link" and, once looked up, what was found. */
+function renderDiscover(main: HTMLElement, v: Extract<View, { mode: 'discover' }>): void {
+  const input = el('input', {
+    id: 'discover-input',
+    type: 'text',
+    value: v.input,
+    spellcheck: 'false',
+    placeholder: 'https://jenkins.example.com/job/my-extension/   or   \\\\server\\share\\vsix',
+    'aria-describedby': 'discover-help',
+  });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      runDiscover(input.value);
+    }
+  });
+  const form = el(
+    'div',
+    { class: 'discover' },
+    el('label', { for: 'discover-input' }, 'Where do you download the extension?'),
+    el(
+      'div',
+      { class: 'row' },
+      input,
+      button(v.busy ? 'Looking…' : 'Look Up', () => runDiscover(input.value), {
+        class: 'primary',
+        id: 'discover-run',
+        disabled: v.busy,
+      }),
+      button('Choose Folder…', () => post({ type: 'pickFolder' }), { id: 'discover-folder' }),
+    ),
+    el(
+      'small',
+      { id: 'discover-help' },
+      'Paste the link of a Jenkins job (or its "Last Successful Artifacts"), of a web page ' +
+        'that lists .vsix files, or of one .vsix file. A folder or network share works too, ' +
+        'and so does an npm package name like @corp/linter.',
+    ),
+  );
+  fill(
+    main,
+    el('h1', {}, 'Add a source'),
+    form,
+    v.busy ? el('p', { class: 'muted', role: 'status' }, 'Looking it up…') : undefined,
+    v.result ? renderDiscovery(v, v.result) : undefined,
+    el(
+      'p',
+      { class: 'manual' },
+      'Know exactly what you need? ',
+      button('Set up manually', () => show({ mode: 'choose' }), { class: 'link' }),
+    ),
+  );
+}
+
+function renderDiscovery(v: Extract<View, { mode: 'discover' }>, result: Discovery): HTMLElement {
+  if (result.kind === 'login') {
+    return el(
+      'div',
+      { class: 'result banner warning', id: 'discover-result' },
+      el('strong', {}, `${capitalize(result.what)} needs a login.`),
+      el('p', {}, result.message),
+      el(
+        'div',
+        { class: 'buttons' },
+        button('About script sources', () => post({ type: 'openDocs', sourceType: 'script' }), {
+          class: 'link',
+        }),
+        button('Set Up a Script Source', () => newSource('script')),
+      ),
+    );
+  }
+  if (result.kind === 'problem') {
+    return el(
+      'div',
+      { class: 'result banner error', id: 'discover-result' },
+      el('strong', {}, result.message),
+      result.hints.length > 0
+        ? el('ul', {}, ...result.hints.map((h) => el('li', {}, h)))
+        : undefined,
+    );
+  }
+
+  const name = v.name ?? result.name;
+  const nameInput = el('input', {
+    id: 'discover-name',
+    type: 'text',
+    value: name,
+    spellcheck: 'false',
+  });
+  const nameError = el('small', { class: 'field-error', 'aria-live': 'polite' });
+  const save = button('Save', () => saveDiscovered(), { class: 'primary', id: 'discover-save' });
+  const checkName = (): void => {
+    const n = nameInput.value.trim();
+    const problem = !SOURCE_NAME.test(n)
+      ? 'Use letters, digits, "-", "_" and "." only.'
+      : n in state.sources
+        ? `There is already a source named "${n}".`
+        : '';
+    nameError.textContent = problem;
+    save.disabled = problem !== '';
+  };
+  nameInput.addEventListener('input', () => {
+    v.name = nameInput.value.trim();
+    checkName();
+  });
+  nameInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !save.disabled) {
+      saveDiscovered();
+    }
+  });
+  const saveDiscovered = (): void => {
+    post({ type: 'save', name: nameInput.value.trim(), source: result.source });
+  };
+  queueMicrotask(checkName);
+
+  const rows = result.extensions.map((e) =>
+    el(
+      'tr',
+      {},
+      el(
+        'td',
+        {},
+        e.displayName ? el('strong', {}, e.displayName) : '',
+        e.displayName ? el('br') : '',
+        el('code', {}, e.id),
+      ),
+      el('td', {}, e.versions[0] ?? ''),
+      el(
+        'td',
+        { class: 'muted' },
+        e.versions.length > 1
+          ? `${e.versions.length - 1} older: ${e.versions.slice(1, 6).join(', ')}${e.versions.length > 6 ? ', …' : ''}`
+          : '',
+      ),
+    ),
+  );
+  return el(
+    'div',
+    { class: 'result', id: 'discover-result' },
+    el(
+      'p',
+      { class: 'found-title' },
+      el(
+        'strong',
+        {},
+        `Found ${result.extensions.length} extension${result.extensions.length === 1 ? '' : 's'}`,
+      ),
+      ` in ${result.what}.`,
+    ),
+    el(
+      'table',
+      { class: 'found' },
+      el(
+        'thead',
+        {},
+        el(
+          'tr',
+          {},
+          el('th', {}, 'Extension'),
+          el('th', {}, 'Newest'),
+          el('th', {}, 'Also available'),
+        ),
+      ),
+      el('tbody', {}, ...rows),
+    ),
+    result.notes.length > 0
+      ? el('ul', { class: 'notes' }, ...result.notes.map((n) => el('li', {}, n)))
+      : undefined,
+    el(
+      'div',
+      { class: 'field' },
+      el('label', { for: 'discover-name' }, 'Name for this source'),
+      nameInput,
+      nameError,
+    ),
+    el(
+      'div',
+      { class: 'buttons' },
+      save,
+      button('Adjust Details…', () =>
+        show({ mode: 'edit', name: nameInput.value.trim(), draft: structuredClone(result.source) }),
+      ),
+    ),
+  );
+}
+
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+function renderEdit(main: HTMLElement): void {
+  if (view.mode !== 'edit') {
+    return;
+  }
   const type = view.draft.type as SourceType;
   const known = new Set(knownPaths(type).map((p) => p.split('.')[0]));
   const unknown = Object.keys(view.draft).filter((k) => !known.has(k));
@@ -361,7 +579,6 @@ function renderSection(section: SectionSpec): HTMLElement {
     {},
     el('legend', {}, section.title),
     section.help ? el('p', { class: 'help' }, section.help) : undefined,
-    section.auth ? renderAuth(section.auth) : undefined,
     ...basic.map((f) => renderField(f)),
     advanced.length > 0
       ? el(
@@ -374,61 +591,24 @@ function renderSection(section: SectionSpec): HTMLElement {
   );
 }
 
-function renderAuth(modes: readonly AuthMode[]): HTMLElement {
-  if (view.mode !== 'edit') {
-    return el('div');
-  }
-  const current = authMode(view.draft);
-  const radios = modes.map((mode) => {
-    const input = el('input', {
-      type: 'radio',
-      name: 'auth-mode',
-      value: mode,
-      id: `auth-${mode}`,
-      checked: mode === current,
-    });
-    input.addEventListener('change', () => {
-      updateDraft((d) => setAuthMode(d, mode));
-      renderMain();
-    });
-    return el('label', { class: 'radio', for: `auth-${mode}` }, input, AUTH_LABELS[mode]);
-  });
-  const fields: FieldSpec[] =
-    current === 'basic'
-      ? [
-          { path: 'auth.basic.user', label: 'User', kind: 'text' },
-          { path: 'auth.basic.password', label: 'Password', kind: 'secret' },
-        ]
-      : current === 'none'
-        ? []
-        : [{ path: `auth.${current}`, label: AUTH_LABELS[current], kind: 'secret' }];
-  return el(
-    'div',
-    { class: 'auth' },
-    el('div', { class: 'radios', role: 'radiogroup', 'aria-label': 'Credentials' }, ...radios),
-    ...fields.map((f) => renderField(f, true)),
-  );
-}
-
 const fieldId = (path: string) => `field-${path.replace(/\./g, '-')}`;
 
-function renderField(field: FieldSpec, keepEmpty = false): HTMLElement {
+function renderField(field: FieldSpec): HTMLElement {
   if (view.mode !== 'edit') {
     return el('div');
   }
   const id = fieldId(field.path);
   const value = getPath(view.draft, field.path);
+  const error = el('small', { class: 'field-error', 'aria-live': 'polite' });
   const store = (input: string | boolean): void => {
     try {
-      // Credential fields keep "" so that the chosen credential mode stays visible.
-      const stored = keepEmpty && input === '' ? '' : fromInput(field, input);
+      const stored = fromInput(field, input);
       updateDraft((d) => setPath(d, field.path, stored));
       error.textContent = '';
     } catch (err) {
       error.textContent = err instanceof Error ? err.message : String(err);
     }
   };
-  const error = el('small', { class: 'field-error', 'aria-live': 'polite' });
   const help = field.help ? el('small', { id: `${id}-help` }, field.help) : undefined;
   const label = el(
     'label',
@@ -483,45 +663,7 @@ function renderField(field: FieldSpec, keepEmpty = false): HTMLElement {
   if (help) {
     input.setAttribute('aria-describedby', `${id}-help`);
   }
-
-  const extras =
-    field.kind === 'secret' ? renderSecretPicker(field, input as HTMLInputElement) : undefined;
-  return el(
-    'div',
-    { class: 'field' },
-    label,
-    el('div', { class: 'row' }, input, extras),
-    help,
-    error,
-  );
-}
-
-/** A credential field: pick a stored credential or store a new one. */
-function renderSecretPicker(field: FieldSpec, input: HTMLInputElement): HTMLElement {
-  const picker = el(
-    'select',
-    { 'aria-label': `Stored credential for ${field.label}` },
-    el('option', { value: '' }, 'Stored credential…'),
-    ...state.storedSecrets.map((s) => el('option', { value: s }, s)),
-  );
-  picker.addEventListener('change', () => {
-    if (picker.value) {
-      input.value = `\${secret:${picker.value}}`;
-      input.dispatchEvent(new Event('input'));
-      picker.value = '';
-    }
-  });
-  const store = button(
-    'Store new…',
-    () =>
-      post({
-        type: 'storeSecret',
-        field: field.path,
-        suggestedName: view.mode === 'edit' ? view.name : 'credential',
-      }),
-    { class: 'secondary' },
-  );
-  return el('span', { class: 'secret-tools' }, state.storedSecrets.length ? picker : '', store);
+  return el('div', { class: 'field' }, label, input, help, error);
 }
 
 function renderStatus(): void {
@@ -534,6 +676,7 @@ function renderStatus(): void {
   const dirty = isDirty();
   const saved = view.originalName !== undefined;
   const nameOk = SOURCE_NAME.test(view.name);
+  const original = view.originalName;
   fill(
     status,
     pendingNavigation
@@ -541,12 +684,12 @@ function renderStatus(): void {
           'div',
           { class: 'banner warning' },
           'This source has unsaved changes. ',
-          button('Discard changes', () => {
+          button('Discard Changes', () => {
             const go = pendingNavigation;
             pendingNavigation = undefined;
             go?.();
           }),
-          button('Keep editing', () => {
+          button('Keep Editing', () => {
             pendingNavigation = undefined;
             renderStatus();
           }),
@@ -572,21 +715,10 @@ function renderStatus(): void {
         disabled: !dirty || errors.length > 0 || !nameOk,
       }),
       button('Test', test, { id: 'test', disabled: errors.length > 0 }),
-      saved && dirty
-        ? button('Revert', () => openSource(view.mode === 'edit' ? view.originalName! : ''))
-        : undefined,
+      saved && dirty ? button('Revert', () => openSource(original!)) : undefined,
       saved
-        ? button(
-            'Delete',
-            () => post({ type: 'delete', name: view.mode === 'edit' ? view.originalName! : '' }),
-            {
-              class: 'danger',
-            },
-          )
-        : button('Cancel', () => {
-            view = { mode: 'list' };
-            render();
-          }),
+        ? button('Delete', () => post({ type: 'delete', name: original! }), { class: 'danger' })
+        : button('Cancel', () => show({ mode: 'list' })),
     ),
   );
 }
@@ -627,21 +759,21 @@ function test(): void {
 
 function applyFocus(focus: EditorFocus | undefined): void {
   if (focus?.kind === 'source') {
+    // After saving, the settings hold exactly what is shown: nothing would be lost.
     const justSaved =
-      view.mode === 'edit' &&
-      view.name === focus.name &&
-      sameSource(view.draft, state.sources[focus.name]);
+      (view.mode === 'edit' &&
+        view.name === focus.name &&
+        sameSource(view.draft, state.sources[focus.name])) ||
+      view.mode === 'discover';
     if (justSaved) {
-      // The draft is now what the settings hold: nothing would be lost.
       openSource(focus.name);
     } else {
       navigate(() => openSource(focus.name));
     }
   } else if (focus?.kind === 'new') {
-    navigate(() => ((view = { mode: 'choose' }), render()));
+    navigate(() => startDiscover());
   } else if (focus?.kind === 'list' && !isDirty()) {
-    view = { mode: 'list' };
-    render();
+    show({ mode: 'list' });
   }
 }
 
@@ -662,10 +794,24 @@ window.addEventListener('message', (event: MessageEvent<ToWebview>) => {
           view = { mode: 'list' };
         }
       }
-      render();
-      validate();
+      if (view.mode === 'discover') {
+        renderList(); // keep the typed link and the result
+      } else {
+        render();
+        validate();
+      }
       return;
     }
+    case 'discovered':
+      if (view.mode === 'discover' && view.input === message.input) {
+        view = { mode: 'discover', input: message.input, busy: false, result: message.result };
+        render();
+        document.getElementById('discover-name')?.focus();
+      }
+      return;
+    case 'folderPicked':
+      runDiscover(message.path);
+      return;
     case 'validation':
       if (message.requestId === requestId) {
         validation = message.result;
@@ -683,17 +829,15 @@ window.addEventListener('message', (event: MessageEvent<ToWebview>) => {
     case 'deleted':
       notice = undefined;
       return;
-    case 'secretStored': {
-      const input = document.getElementById(fieldId(message.field));
-      if (input instanceof HTMLInputElement) {
-        input.value = `\${secret:${message.name}}`;
-        input.dispatchEvent(new Event('input'));
-      }
-      return;
-    }
     case 'error':
       notice = { kind: 'error', text: message.message };
-      renderStatus();
+      if (view.mode === 'discover') {
+        render();
+        const result = document.getElementById('discover-result');
+        result?.prepend(el('div', { class: 'banner error', role: 'status' }, message.message));
+      } else {
+        renderStatus();
+      }
       return;
   }
 });

@@ -29,7 +29,7 @@ afterEach(async () => {
   await Promise.all(servers.splice(0).map((s) => s.close()));
 });
 
-function example(name: string, env: Record<string, string>, secrets: Record<string, string> = {}) {
+function example(name: string, env: Record<string, string>) {
   const config = parseConfig(
     settings({
       'script.enabled': true,
@@ -42,14 +42,12 @@ function example(name: string, env: Record<string, string>, secrets: Record<stri
         },
       },
     }),
-    { secrets },
   );
   expect(config.problems).toEqual([]);
   return new ScriptSource(config.sources[0] as ScriptSourceConfig, 30_000, NULL_LOGGER, {
     gate: { enabled: () => true, isApproved: () => true, requestApproval: () => undefined },
     schema,
     hostVersion: '1.99.0',
-    addSecret: () => undefined,
   });
 }
 
@@ -105,7 +103,7 @@ describe.skipIf(!python)(`Python examples (${python ?? 'no python'})`, () => {
     await expect(missing.list(NEVER_CANCELLED)).rejects.toThrow(/^Folder not found/);
   });
 
-  it('jenkins_source.py uses credentials from the environment and ref values', async () => {
+  it('jenkins_source.py signs in itself (environment) and downloads the file itself', async () => {
     const dir = await vsixDir({
       'corp.ci-2.1.0.vsix': 'ci 2.1.0',
       'corp.ci-2.0.0.vsix': 'ci 2.0.0',
@@ -135,9 +133,9 @@ describe.skipIf(!python)(`Python examples (${python ?? 'no python'})`, () => {
       JENKINS_URL: s.url,
       JENKINS_JOB: 'ci',
       JENKINS_USER: 'reader',
-      JENKINS_TOKEN: '${secret:jenkins}',
+      JENKINS_TOKEN: 'tok-123',
     };
-    const src = example('jenkins_source.py', env, { jenkins: 'tok-123' });
+    const src = example('jenkins_source.py', env);
     const [artifact] = await src.list(NEVER_CANCELLED);
     expect(artifact!.versions.map((v) => [v.version, v.ref.build])).toEqual([
       ['2.1.0', '9'],
@@ -157,7 +155,7 @@ describe.skipIf(!python)(`Python examples (${python ?? 'no python'})`, () => {
       await src.fetchReleaseNotes(artifact!, artifact!.versions[1]!, NEVER_CANCELLED),
     ).toBeUndefined();
 
-    const wrong = example('jenkins_source.py', env, { jenkins: 'wrong' });
+    const wrong = example('jenkins_source.py', { ...env, JENKINS_TOKEN: 'wrong' });
     await expect(wrong.list(NEVER_CANCELLED)).rejects.toThrow(
       /HTTP 401 from Jenkins \(check JENKINS_USER\/JENKINS_TOKEN\)/,
     );

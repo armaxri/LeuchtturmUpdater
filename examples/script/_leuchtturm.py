@@ -109,7 +109,8 @@ def run(
     """Parses the arguments, calls the matching handler and prints its result.
 
     - get_versions() returns the list of artifacts.
-    - download_version(req) returns {"path": ...} or {"url": ..., "headers": {...}}.
+    - download_version(req) returns {"path": ...} (a file you downloaded into
+      req.target_dir) or {"url": ...} (a public URL that Leuchtturm downloads).
     - get_release_notes(req) returns Markdown, or None if there are none.
 
     Any exception becomes an error response with the traceback as detail.

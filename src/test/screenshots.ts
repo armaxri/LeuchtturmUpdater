@@ -88,11 +88,14 @@ async function main(): Promise<void> {
         clip: { x: 0, y: 0, width: bar.x + bar.width + 40, height },
       });
 
-      step('opening the source editor');
-      await runCommand(page, 'Leuchtturm: Manage Sources');
+      step('adding a source from a pasted Jenkins link');
+      await runCommand(page, 'Leuchtturm: Add Source…');
       const form = activeWebview(page);
-      await form.locator('[data-source="jenkins"]').click();
-      await form.locator('#field-index-url').waitFor();
+      await form
+        .locator('#discover-input')
+        .fill(`${scenario.jenkinsUrl}/job/demo-ci/lastSuccessfulBuild/artifact/`);
+      await form.locator('#discover-run').click();
+      await form.getByText('Found 1 extension').waitFor();
       await page.waitForTimeout(800);
       await page.locator('.part.editor').screenshot({ path: path.join(OUT, 'source-editor.png') });
     } finally {

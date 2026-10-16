@@ -1,5 +1,15 @@
 # `http` source: Jenkins, web servers, Artifactory, GitLab …
 
+**The easy way:** run **Leuchtturm: Add Source…** (the **+** in the Leuchtturm view) and paste
+the link where you download the extension: a Jenkins job, its _Last Successful Artifacts_ page,
+a single artifact link, or any web page that lists `.vsix` files. Leuchtturm recognises what it
+is, shows the extensions and versions it found, and writes the configuration below for you.
+Read on if you want to adjust it or write it by hand.
+
+The `http` source is for servers that need **no login**. Leuchtturm does not handle
+credentials, certificates or custom headers. For a server that needs a login, use a
+[`script` source](script.md): your script signs in and downloads, Leuchtturm runs it.
+
 The `http` source works in three steps:
 
 1. **Index request**: fetch a page or API response that lists the available files.
@@ -12,7 +22,6 @@ The `http` source works in three steps:
   "jenkins-linter": {
     "type": "http",
     "index": { "url": "https://jenkins.corp.example/job/corp-linter/api/json?tree=builds[number,result,artifacts[fileName,relativePath]]{0,20}" },
-    "auth": { "basic": { "user": "ci-reader", "password": "${secret:jenkins}" } },
     "match": {
       "jsonPath": "$.builds[*].artifacts[*]",
       "where": { "result": "SUCCESS" },
@@ -25,32 +34,30 @@ The `http` source works in three steps:
 }
 ```
 
-Then run **Leuchtturm: Store Credential…**, pick `jenkins` and enter the password or API
-token. Finally run **Leuchtturm: Test Source…** to see what was matched.
+Run **Leuchtturm: Test Source…** to see what was matched.
 
 ## Options
 
-| Field                           | Description                                                                                                                                                           |
-| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `index.url`                     | URL of the listing. `${env:NAME}` and `${secret:NAME}` work here.                                                                                                     |
-| `index.method`                  | `GET` (default), `POST` or `HEAD`.                                                                                                                                    |
-| `index.headers`, `index.body`   | Extra headers and request body (templated like the URL).                                                                                                              |
-| `match.regex`                   | Regex with named groups. `version` is required, and `id` unless `match.id` is set. Every match in the body is collected.                                              |
-| `match.flags`                   | Regex flags, default `g`. `g` is always added.                                                                                                                        |
-| `match.jsonPath`                | For JSON responses: selects items, e.g. `$.builds[*].artifacts[*]`. See below.                                                                                        |
-| `match.field`                   | jsonPath mode: the field `regex` runs on. Default `value` (for plain string items).                                                                                   |
-| `match.where`                   | Only keep matches whose groups or fields have these exact values, e.g. `{ "result": "SUCCESS" }`.                                                                     |
-| `match.id`                      | Fixed extension ID, for listings that only contain versions.                                                                                                          |
-| `download.url`                  | Download URL. Every captured group, `${id}` and `${version}` are available.                                                                                           |
-| `download.headers`              | Extra headers for the download (templated).                                                                                                                           |
-| `releaseNotes.url`              | Optional release notes URL (templated like `download.url`). Fetched with the source's credentials when you click _Release notes_.                                     |
-| `auth`                          | `{ "basic": { "user": "…", "password": "…" } }` or `{ "bearer": "…" }`. Sent with every request of this source, unless a request sets its own `Authorization` header. |
-| `ca`                            | Path to an extra trusted CA certificate (PEM), for servers with an internal CA.                                                                                       |
-| `strictSSL`                     | `true` by default. `false` turns off certificate checks; Leuchtturm then shows a warning in the log and in the tooltip. Prefer `ca`.                                  |
-| `timeout`                       | Seconds for the index request (default `leuchtturm.http.timeout`). Downloads get ten times as long, at least 5 minutes.                                               |
-| `include`, `exclude`, `enabled` | As for every source.                                                                                                                                                  |
+| Field                           | Description                                                                                                              |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `index.url`                     | URL of the listing. `${env:NAME}` works here.                                                                            |
+| `index.method`                  | `GET` (default), `POST` or `HEAD`.                                                                                       |
+| `index.body`                    | Request body (templated like the URL).                                                                                   |
+| `match.regex`                   | Regex with named groups. `version` is required, and `id` unless `match.id` is set. Every match in the body is collected. |
+| `match.flags`                   | Regex flags, default `g`. `g` is always added.                                                                           |
+| `match.jsonPath`                | For JSON responses: selects items, e.g. `$.builds[*].artifacts[*]`. See below.                                           |
+| `match.field`                   | jsonPath mode: the field `regex` runs on. Default `value` (for plain string items).                                      |
+| `match.where`                   | Only keep matches whose groups or fields have these exact values, e.g. `{ "result": "SUCCESS" }`.                        |
+| `match.id`                      | Fixed extension ID, for listings that only contain versions.                                                             |
+| `download.url`                  | Download URL. Every captured group, `${id}` and `${version}` are available.                                              |
+| `releaseNotes.url`              | Optional release notes URL (templated like `download.url`). Fetched when you click _Release notes_.                      |
+| `timeout`                       | Seconds for the index request (default `leuchtturm.http.timeout`). Downloads get ten times as long, at least 5 minutes.  |
+| `include`, `exclude`, `enabled` | As for every source.                                                                                                     |
 
-`strictSSL` and `ca` may also be written inside `index`, as in older examples.
+`auth`, `headers`, `ca` and `strictSSL` are not supported: a source that sets them shows a
+problem that points to script sources. HTTPS works with the certificates VS Code trusts, which
+include the ones installed on your computer, so an internal company CA that your IT installed
+works without any setting.
 
 ### How matching works
 
@@ -70,26 +77,25 @@ that don't are listed with the reason by _Test Source_.
 
 ### Templates
 
-All captured groups and fields are available as `${name}` in `download.url`,
-`download.headers` and `releaseNotes.url`, together with `${id}`, `${version}`,
-`${env:NAME}`, `${secret:NAME}`, `${userHome}` and `${platform}`. An unknown variable is a
+All captured groups and fields are available as `${name}` in `download.url` and
+`releaseNotes.url`, together with `${id}`, `${version}`, `${env:NAME}`, `${userHome}` and
+`${platform}`. An unknown variable is a
 configuration error, never an empty string. In regex mode, Leuchtturm checks the template
 against the regex's group names when the settings are loaded.
 
-### Credentials
+### Servers that need a login
 
-Never put passwords or tokens into `settings.json`. Use `${secret:NAME}` and store the value
-with **Leuchtturm: Store Credential…**. It goes into VS Code's secret storage, which is
-encrypted by the operating system's keychain. `${env:NAME}` works too, for example in CI.
-
-Leuchtturm masks stored secrets, `Authorization` headers and URL passwords in every log line.
-When a redirect leads to a different host, the `Authorization` header is dropped.
+Leuchtturm sends no credentials. When a server answers with _401_ or _403_, or redirects to a
+login page, the source shows a problem saying that the server needs a login, and _Add Source_
+says so right away. Ask whoever runs the server for a script that signs in, lists the
+extensions and downloads them (or write one; [`examples/script/jenkins_source.py`](../../examples/script/jenkins_source.py)
+is a starting point for Jenkins), and add it as a [`script` source](script.md).
 
 ## Debugging with Test Source
 
 **Leuchtturm: Test Source…** prints, for one source:
 
-- the request and the HTTP status (`401`/`403` come with "check credentials"),
+- the request and the HTTP status (`401`/`403` say that the server needs a login),
 - the first 2 KB of the response body,
 - every match with all its groups, and the download URL resolved from them,
 - every candidate that was skipped, and why.
@@ -105,7 +111,6 @@ returns compact JSON in a fixed field order.
 "jenkins-linter": {
   "type": "http",
   "index": { "url": "https://jenkins.corp.example/job/corp-linter/api/json?tree=builds[number,result,artifacts[fileName,relativePath]]{0,20}" },
-  "auth": { "basic": { "user": "ci-reader", "password": "${secret:jenkins}" } },
   "match": {
     "regex": "\"number\":(?<build>\\d+),\"result\":\"SUCCESS\",\"artifacts\":\\[\\{\"fileName\":\"(?<id>corp\\.[\\w-]+)-(?<version>\\d+\\.\\d+\\.\\d+)\\.vsix\",\"relativePath\":\"(?<path>[^\"]+)\""
   },
@@ -124,7 +129,6 @@ When the API is not reachable, use the HTML page of a build's artifacts:
 "jenkins-html": {
   "type": "http",
   "index": { "url": "https://jenkins.corp.example/job/corp-linter/lastSuccessfulBuild/artifact/dist/" },
-  "auth": { "basic": { "user": "ci-reader", "password": "${secret:jenkins}" } },
   "match": { "regex": "href=\"(?<file>(?<id>corp\\.[\\w-]+)-(?<version>\\d+\\.\\d+\\.\\d+)\\.vsix)\"" },
   "download": { "url": "https://jenkins.corp.example/job/corp-linter/lastSuccessfulBuild/artifact/dist/${file}" }
 }
@@ -139,18 +143,16 @@ This only sees the last successful build, so older versions cannot be installed 
   "type": "http",
   "index": { "url": "https://files.corp.example/vscode/" },
   "match": { "regex": "href=\"(?<file>(?<id>corp\\.[\\w-]+)-(?<version>\\d+\\.\\d+\\.\\d+(?:-[\\w.]+)?)\\.vsix)\"" },
-  "download": { "url": "https://files.corp.example/vscode/${file}" },
-  "ca": "~/certs/corp-root-ca.pem"
+  "download": { "url": "https://files.corp.example/vscode/${file}" }
 }
 ```
 
-### Artifactory folder (storage API)
+### Artifactory folder (storage API, anonymous read access)
 
 ```jsonc
 "artifactory": {
   "type": "http",
   "index": { "url": "https://artifactory.corp.example/artifactory/api/storage/vscode-local/extensions" },
-  "auth": { "bearer": "${secret:artifactory}" },
   "match": {
     "jsonPath": "$.children[*]",
     "where": { "folder": "false" },
@@ -161,7 +163,7 @@ This only sees the last successful build, so older versions cannot be installed 
 }
 ```
 
-### GitLab generic packages
+### GitLab generic packages (public project)
 
 One package per extension, named after the extension ID. Because GitLab's own `id` field is the
 numeric package ID, set `match.id`:
@@ -170,13 +172,11 @@ numeric package ID, set `match.id`:
 "gitlab-linter": {
   "type": "http",
   "index": {
-    "url": "https://gitlab.corp.example/api/v4/projects/1234/packages?package_type=generic&package_name=corp.linter&order_by=version&sort=desc",
-    "headers": { "PRIVATE-TOKEN": "${secret:gitlab}" }
+    "url": "https://gitlab.corp.example/api/v4/projects/1234/packages?package_type=generic&package_name=corp.linter&order_by=version&sort=desc"
   },
   "match": { "jsonPath": "$[*]", "where": { "status": "default" }, "id": "corp.linter" },
   "download": {
-    "url": "https://gitlab.corp.example/api/v4/projects/1234/packages/generic/corp.linter/${version}/corp.linter-${version}.vsix",
-    "headers": { "PRIVATE-TOKEN": "${secret:gitlab}" }
+    "url": "https://gitlab.corp.example/api/v4/projects/1234/packages/generic/corp.linter/${version}/corp.linter-${version}.vsix"
   }
 }
 ```
@@ -189,7 +189,6 @@ Each package item has a `version` field, so no regex is needed.
 "gitea-linter": {
   "type": "http",
   "index": { "url": "https://gitea.corp.example/api/v1/packages/tools?type=generic&q=corp.linter" },
-  "auth": { "bearer": "${secret:gitea}" },
   "match": { "jsonPath": "$[*]", "where": { "name": "corp.linter" }, "id": "corp.linter" },
   "download": { "url": "https://gitea.corp.example/api/packages/tools/generic/corp.linter/${version}/corp.linter-${version}.vsix" }
 }

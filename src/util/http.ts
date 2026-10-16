@@ -1,10 +1,10 @@
 /**
  * Small HTTP client on top of `node:http`/`node:https`.
  *
- * Why not the global `fetch`? Node's `fetch` cannot turn off certificate checks or add a CA
- * per request without the `undici` package. `https.request` takes `rejectUnauthorized` and
- * `ca` directly, so this needs no runtime dependency. Proxy support (SPEC §5) plugs in here
- * later as an `agent`.
+ * Why not the global `fetch`? Inside VS Code, `node:http(s)` requests go through VS Code's
+ * proxy and certificate support (`http.proxy`, system certificates), which `fetch` does not
+ * reliably get. This adds limits that `node:http` lacks: redirects, timeouts, cancellation and
+ * a maximum body size.
  */
 
 import { createWriteStream } from 'node:fs';
@@ -20,10 +20,6 @@ export interface HttpOptions {
   headers?: Record<string, string>;
   body?: string;
   timeoutMs: number;
-  /** `false` disables certificate verification. Default `true`. */
-  strictSSL?: boolean;
-  /** Extra trusted CA certificates (PEM). */
-  ca?: string | Buffer;
   token: CancellationToken;
   /** Abort if the response body is larger than this. Default 20 MB (ignored for downloads). */
   maxBytes?: number;
@@ -48,7 +44,7 @@ export class HttpError extends Error {
   ) {
     const hint =
       status === 401 || status === 403
-        ? ' — check credentials'
+        ? ' — the server needs a login. Leuchtturm does not handle logins; use a script source'
         : status === 404
           ? ' — check the URL'
           : '';
@@ -121,8 +117,6 @@ function open(
         ...headers,
         ...(body !== undefined ? { 'content-length': Buffer.byteLength(body).toString() } : {}),
       },
-      rejectUnauthorized: options.strictSSL !== false,
-      ca: options.ca,
     });
     const timer = setTimeout(
       () => req.destroy(new TimeoutError(`Request timed out after ${options.timeoutMs / 1000} s`)),
@@ -214,9 +208,4 @@ export async function httpDownload(
     }
     return { status, url: finalUrl, bytes: size };
   });
-}
-
-/** `Authorization` header value for HTTP basic auth. */
-export function basicAuth(user: string, password: string): string {
-  return `Basic ${Buffer.from(`${user}:${password}`).toString('base64')}`;
 }

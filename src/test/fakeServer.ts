@@ -2,14 +2,18 @@
  * A local stand-in for a Jenkins server and a web server directory listing, used by the unit
  * tests, the integration tests and the sandbox. Never talk to real servers in tests.
  *
+ *   /job/<job>/                            Jenkins job page (HTML)
  *   /job/<job>/api/json                    Jenkins JSON API (builds newest first)
  *   /job/<job>/<n>/artifact/<path>         build artifacts
+ *   /job/<job>/lastSuccessfulBuild/artifact/          "Last Successful Artifacts" (HTML)
+ *   /job/<job>/lastSuccessfulBuild/artifact/<path>    its files
  *   /vsix/                                 nginx-style autoindex HTML of `autoindex.dir`
  *   /vsix/<file>                           files from that folder
  *   /redirect?to=<path>                    302 to another path (redirect tests)
  *   /npm/…                                 npm registry: packuments, tarballs, search API
  *
- * With `auth`, every /job/ request needs HTTP basic auth. With `npm.token`, every registry
+ * With `auth`, every /job/ request needs HTTP basic auth (a server that needs a login, which
+ * Leuchtturm does not handle). With `npm.token`, every registry
  * request needs `Authorization: Bearer <token>`.
  */
 
@@ -21,6 +25,7 @@ import * as net from 'node:net';
 import type { AddressInfo } from 'node:net';
 import * as path from 'node:path';
 
+import { compareVersions } from '../version';
 import { TLS_CERT, TLS_KEY } from './paths';
 
 export interface FakeBuild {
@@ -107,6 +112,38 @@ async function handle(
       }
     }
     const rest = p.slice(`/job/${job.job}/`.length);
+    res.setHeader('x-jenkins', '2.500');
+    const lastSuccessful = [...job.builds]
+      .sort((a, b) => b.number - a.number)
+      .find((b) => b.result === 'SUCCESS');
+    if (rest === '') {
+      send(
+        res,
+        200,
+        `<html><body><h1>Project ${job.job}</h1><a href="lastSuccessfulBuild/artifact/">Last Successful Artifacts</a></body></html>`,
+        'text/html',
+      );
+      return;
+    }
+    if (rest === 'lastSuccessfulBuild/artifact/') {
+      const links = Object.keys(lastSuccessful?.artifacts ?? {})
+        .map((rel) => `<a href="${rel}">${path.posix.basename(rel)}</a>`)
+        .join('<br>');
+      send(
+        res,
+        200,
+        `<html><body><h1>Last Successful Artifacts</h1>${links}</body></html>`,
+        'text/html',
+      );
+      return;
+    }
+    if (rest.startsWith('lastSuccessfulBuild/artifact/')) {
+      await sendFile(
+        res,
+        lastSuccessful?.artifacts[rest.slice('lastSuccessfulBuild/artifact/'.length)],
+      );
+      return;
+    }
     if (rest === 'api/json') {
       // Compact JSON, newest build first, like Jenkins.
       const builds = [...job.builds]
@@ -119,7 +156,12 @@ async function handle(
             relativePath,
           })),
         }));
-      send(res, 200, JSON.stringify({ builds }), 'application/json');
+      send(
+        res,
+        200,
+        JSON.stringify({ _class: 'hudson.model.FreeStyleProject', builds }),
+        'application/json',
+      );
       return;
     }
     const m = /^(\d+)\/artifact\/(.+)$/.exec(rest);
@@ -183,7 +225,25 @@ function handleNpm(
     const text = url.searchParams.get('text') ?? '';
     const scope = /scope:(\S+)/.exec(text)?.[1];
     const names = Object.keys(npm.packages).filter((n) => !scope || n.startsWith(`@${scope}/`));
-    const body = { objects: names.map((name) => ({ package: { name } })), total: names.length };
+    // The shape npm's own `npm search` expects (it reads more than the name).
+    const body = {
+      objects: names.map((name) => ({
+        package: {
+          name,
+          version: Object.keys(npm.packages[name] ?? {}).at(-1) ?? '0.0.0',
+          description: '',
+          keywords: [],
+          date: '2026-01-01T00:00:00.000Z',
+          links: {},
+          publisher: { username: 'demo' },
+          maintainers: [{ username: 'demo' }],
+        },
+        score: { final: 1, detail: { quality: 1, popularity: 1, maintenance: 1 } },
+        searchScore: 1,
+      })),
+      total: names.length,
+      time: new Date().toUTCString(),
+    };
     send(res, 200, JSON.stringify(body), 'application/json');
     return;
   }
@@ -225,7 +285,18 @@ function handleNpm(
       ];
     }),
   );
-  send(res, 200, JSON.stringify({ name, versions }), 'application/json');
+  // Like a real registry: `latest` points at the newest release (npm view needs it).
+  const releases = Object.keys(versions).filter((v) => !v.includes('-'));
+  const latest = releases.sort((a, b) => compareVersions(b, a))[0] ?? Object.keys(versions)[0];
+  const time = Object.fromEntries(
+    Object.keys(versions).map((v) => [v, '2026-01-01T00:00:00.000Z']),
+  );
+  send(
+    res,
+    200,
+    JSON.stringify({ name, 'dist-tags': latest ? { latest } : {}, versions, time }),
+    'application/json',
+  );
 }
 
 export async function startFakeServer(config: FakeServerConfig): Promise<FakeServer> {

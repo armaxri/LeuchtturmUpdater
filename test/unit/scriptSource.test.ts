@@ -43,11 +43,10 @@ function make(
       'script.enabled': true,
       sources: { custom: { type: 'script', command: process.execPath, script, ...extra } },
     }),
-    { secrets: { tok: 's3cr3t-value' } },
+    { env: { CUSTOM_SOURCE: 'from-env' } },
   );
   expect(config.problems).toEqual([]);
   const requested: string[] = [];
-  const secrets: string[] = [];
   const src = new ScriptSource(config.sources[0] as ScriptSourceConfig, timeoutMs, NULL_LOGGER, {
     gate: {
       enabled: () => true,
@@ -57,9 +56,8 @@ function make(
     },
     schema,
     hostVersion: '1.99.0',
-    addSecret: (v) => secrets.push(v),
   });
-  return { src, requested, secrets };
+  return { src, requested };
 }
 
 const LIST = `if (action === 'get_versions') out({ artifacts: [{ id: 'corp.x', versions: [
@@ -80,7 +78,7 @@ if (action === 'download_version') {
   out({ path: file });
 }`);
     const { src } = make(script, {
-      env: { CUSTOM: '${secret:tok}' },
+      env: { CUSTOM: '${env:CUSTOM_SOURCE}' },
       args: {
         download: [
           'download_version',
@@ -118,7 +116,7 @@ if (action === 'download_version') {
       vs: '1.99.0',
       b: '7',
       k: 'a b',
-      custom: 's3cr3t-value',
+      custom: 'from-env',
     });
   });
 
@@ -215,7 +213,6 @@ if (action === 'get_release_notes') { if (process.argv.includes('1.1.0')) out({ 
       gate: { enabled: () => true, isApproved: () => true, requestApproval: () => undefined },
       schema,
       hostVersion: '1',
-      addSecret: () => undefined,
     });
     await expect(src.list(NEVER_CANCELLED)).rejects.toThrow(
       /Command not found: "leuchtturm-no-such-cmd"/,

@@ -14,8 +14,6 @@ export interface TemplateContext {
   ref?: Readonly<Record<string, string>>;
   /** Defaults to `process.env`. */
   env?: Readonly<Record<string, string | undefined>>;
-  /** Already-resolved secrets from SecretStorage, by name. */
-  secrets?: Readonly<Record<string, string>>;
   /** Defaults to `os.homedir()`. */
   userHome?: string;
   /** Defaults to `currentPlatform()`. */
@@ -43,14 +41,10 @@ function lookup(name: string, ctx: TemplateContext): string {
     return value;
   }
   if (name.startsWith('secret:')) {
-    const key = name.slice(7);
-    const value = ctx.secrets?.[key];
-    if (value === undefined) {
-      throw new TemplateError(
-        `Secret "${key}" is not stored. Run "Leuchtturm: Store Credential…" to set it.`,
-      );
-    }
-    return value;
+    throw new TemplateError(
+      `\${${name}} is not supported: Leuchtturm does not handle credentials. Use a "script" ` +
+        'source for servers that need a login; the script signs in itself.',
+    );
   }
   if (name.startsWith('ref.')) {
     const key = name.slice(4);
@@ -90,21 +84,7 @@ export function expandPath(template: string, ctx: TemplateContext = {}): string 
   return expanded;
 }
 
-/** Names of all `${secret:NAME}` references in the given strings, deduplicated. */
-export function findSecretNames(...templates: string[]): string[] {
-  const names = new Set<string>();
-  for (const t of templates) {
-    for (const m of t.matchAll(VAR_RE)) {
-      const name = (m[1] ?? '').trim();
-      if (name.startsWith('secret:')) {
-        names.add(name.slice(7));
-      }
-    }
-  }
-  return [...names];
-}
-
-/** All variable names used in the given strings (`env:X`, `secret:Y`, `ref.z`, `id`, …). */
+/** All variable names used in the given strings (`env:X`, `ref.z`, `id`, …). */
 export function findVariableNames(...templates: string[]): string[] {
   const names = new Set<string>();
   for (const t of templates) {

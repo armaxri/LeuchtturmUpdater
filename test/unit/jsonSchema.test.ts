@@ -37,13 +37,7 @@ describe('script protocol schema', () => {
       ),
     ).toEqual([]);
     expect(validateJson(schema, { protocol: 1, path: '/tmp/x.vsix' }, 'download')).toEqual([]);
-    expect(
-      validateJson(
-        schema,
-        { protocol: 1, url: 'https://x/y.vsix', headers: { A: 'b' } },
-        'download',
-      ),
-    ).toEqual([]);
+    expect(validateJson(schema, { protocol: 1, url: 'https://x/y.vsix' }, 'download')).toEqual([]);
     expect(validateJson(schema, { protocol: 1, markdown: '## x' }, 'notes')).toEqual([]);
     expect(validateJson(schema, { protocol: 1, error: 'down', detail: 'x' }, 'error')).toEqual([]);
   });

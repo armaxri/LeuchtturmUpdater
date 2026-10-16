@@ -1,7 +1,8 @@
-// Leuchtturm Updater: `http` source examples.
-// Paste into your *user* settings.json. Store credentials with
-// "Leuchtturm: Store Credential…" (they never belong in settings.json).
-// Check each source with "Leuchtturm: Test Source…".
+// Leuchtturm Updater: `http` source examples, for servers that need no login.
+// Easiest: let "Leuchtturm: Add Source…" generate this from a pasted link. To write it by
+// hand, paste into your *user* settings.json and check it with "Leuchtturm: Test Source…".
+// A server that needs a login? Use a `script` source (see script.jsonc): Leuchtturm itself
+// handles no credentials.
 {
   "leuchtturm.sources": {
     // Jenkins JSON API. Fields of each artifact and of its build are available as groups.
@@ -10,7 +11,6 @@
       "index": {
         "url": "https://jenkins.corp.example/job/corp-linter/api/json?tree=builds[number,result,artifacts[fileName,relativePath]]{0,20}",
       },
-      "auth": { "basic": { "user": "ci-reader", "password": "${secret:jenkins}" } },
       "match": {
         "jsonPath": "$.builds[*].artifacts[*]",
         "where": { "result": "SUCCESS" },
@@ -25,7 +25,8 @@
       },
     },
 
-    // A web server directory listing (Apache/nginx autoindex) behind an internal CA.
+    // A web server directory listing (Apache/nginx autoindex). An internal CA works when it
+    // is installed on the computer (VS Code uses the system certificates).
     "web": {
       "type": "http",
       "index": { "url": "https://files.corp.example/vscode/" },
@@ -33,16 +34,14 @@
         "regex": "href=\"(?<file>(?<id>corp\\.[\\w-]+)-(?<version>\\d+\\.\\d+\\.\\d+(?:-[\\w.]+)?)\\.vsix)\"",
       },
       "download": { "url": "https://files.corp.example/vscode/${file}" },
-      "ca": "~/certs/corp-root-ca.pem",
     },
 
-    // Artifactory storage API.
+    // Artifactory storage API (repository with anonymous read access).
     "artifactory": {
       "type": "http",
       "index": {
         "url": "https://artifactory.corp.example/artifactory/api/storage/vscode-local/extensions",
       },
-      "auth": { "bearer": "${secret:artifactory}" },
       "match": {
         "jsonPath": "$.children[*]",
         "where": { "folder": "false" },
@@ -54,17 +53,15 @@
       },
     },
 
-    // GitLab generic package registry: one package per extension.
+    // GitLab generic package registry of a public project: one package per extension.
     "gitlab-linter": {
       "type": "http",
       "index": {
         "url": "https://gitlab.corp.example/api/v4/projects/1234/packages?package_type=generic&package_name=corp.linter&order_by=version&sort=desc",
-        "headers": { "PRIVATE-TOKEN": "${secret:gitlab}" },
       },
       "match": { "jsonPath": "$[*]", "where": { "status": "default" }, "id": "corp.linter" },
       "download": {
         "url": "https://gitlab.corp.example/api/v4/projects/1234/packages/generic/corp.linter/${version}/corp.linter-${version}.vsix",
-        "headers": { "PRIVATE-TOKEN": "${secret:gitlab}" },
       },
     },
   },

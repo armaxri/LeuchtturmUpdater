@@ -2,15 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { knownPaths, sectionsFor, type FieldSpec } from '../../src/sourceEditor/formSpec';
 import { validateSource, type ValidationContext } from '../../src/sourceEditor/validate';
-import {
-  authMode,
-  fromInput,
-  getPath,
-  sameSource,
-  setAuthMode,
-  setPath,
-  toText,
-} from '../../src/sourceEditor/values';
+import { fromInput, getPath, sameSource, setPath, toText } from '../../src/sourceEditor/values';
 
 const field = (kind: FieldSpec['kind'], extra: Partial<FieldSpec> = {}): FieldSpec => ({
   path: 'x',
@@ -69,17 +61,6 @@ describe('form values', () => {
     expect(fromInput(field('text'), '')).toBeUndefined();
   });
 
-  it('switches credential modes and keeps a token', () => {
-    let s: Record<string, unknown> = { type: 'npm', auth: { token: '${secret:n}' } };
-    expect(authMode(s)).toBe('token');
-    s = setAuthMode(s, 'bearer');
-    expect(s.auth).toEqual({ bearer: '${secret:n}' });
-    s = setAuthMode(s, 'basic');
-    expect(s.auth).toEqual({ basic: { user: '', password: '' } });
-    s = setAuthMode(s, 'none');
-    expect(s).toEqual({ type: 'npm' });
-  });
-
   it('compares sources independent of key order', () => {
     expect(sameSource({ a: 1, b: { c: 2, d: 3 } }, { b: { d: 3, c: 2 }, a: 1 })).toBe(true);
     expect(sameSource({ a: 1 }, { a: 2 })).toBe(false);
@@ -93,15 +74,19 @@ describe('formSpec', () => {
       expect(sections.at(-1)?.title).toBe('General');
       expect(knownPaths(type)).toContain('enabled');
     }
-    expect(knownPaths('http')).toContain('auth');
-    expect(knownPaths('file')).not.toContain('auth');
+    expect(knownPaths('http')).toContain('match.jsonPath');
+    // No credential or certificate fields anywhere: Leuchtturm handles no logins.
+    for (const type of ['file', 'http', 'npm', 'script'] as const) {
+      expect(knownPaths(type).filter((p) => /auth|ca$|strictSSL|npmrc|headers/.test(p))).toEqual(
+        [],
+      );
+    }
   });
 });
 
 describe('validateSource', () => {
   const ctx: ValidationContext = {
     otherNames: ['share'],
-    storedSecrets: ['jenkins'],
     scriptEnabled: false,
     env: {},
   };
@@ -142,21 +127,13 @@ describe('validateSource', () => {
     expect(v.warnings).toEqual(['This source is disabled and will not be checked.']);
   });
 
-  it('warns about missing and plain-text credentials', () => {
-    const source = {
-      type: 'npm',
-      registry: 'https://npm.example/',
-      scope: '@corp',
-      auth: { basic: { user: 'me', password: 'hunter2' } },
-    };
-    expect(validateSource('n', source, ctx).warnings).toEqual([
-      'auth.basic.password is stored as plain text in settings.json. Prefer a stored credential.',
-    ]);
-    const withSecret = { ...source, auth: { token: '${secret:nexus}' } };
-    expect(validateSource('n', withSecret, ctx)).toEqual({
-      errors: [],
-      warnings: ['The credential "nexus" is not stored yet. Use "Store credential…".'],
-    });
+  it('reports credentials as not supported', () => {
+    const v = validateSource(
+      'n',
+      { type: 'npm', scope: '@corp', auth: { token: '${secret:nexus}' } },
+      ctx,
+    );
+    expect(v.errors).toEqual([expect.stringMatching(/"auth" is not supported/)]);
   });
 
   it('warns when scripts are turned off but still checks the fields', () => {

@@ -1,8 +1,11 @@
 /**
  * Config for the `http` source (SPEC §6.4): index request → matcher → download request.
  *
- * The index request and the auth header contain no per-version variables, so they are
- * expanded here once; errors become config problems. Download and release-notes templates
+ * The index request contains no per-version variables, so it is expanded here once; errors
+ * become config problems.
+ *
+ * There is deliberately no login support (no auth, no custom headers, no TLS options): servers
+ * that need credentials are reached through a `script` source, which handles them itself. Download and release-notes templates
  * depend on the matched groups and are expanded per version later; here we only check that
  * every variable they use can exist.
  */
@@ -13,8 +16,6 @@ import {
   compileRegex,
   isObject,
   optionalString,
-  parseAuth,
-  parseTls,
   regexGroupNames,
   requiredString,
   SourceConfigError,
@@ -36,32 +37,21 @@ export interface HttpMatchConfig {
 
 export interface HttpSourceConfig extends CommonSourceConfig {
   type: 'http';
-  index: { url: string; method: string; headers: Record<string, string>; body?: string };
+  index: { url: string; method: string; body?: string };
   match: HttpMatchConfig;
-  /** Templates, expanded per version. */
-  download: { url: string; headers: Record<string, string> };
+  /** Template, expanded per version. */
+  download: { url: string };
   releaseNotesUrl?: string;
-  /** Expanded `Authorization` value from `auth`, sent unless a request sets its own. */
-  authorization?: string;
-  strictSSL: boolean;
-  /** Absolute path of an extra CA certificate (PEM). */
-  caPath?: string;
-  /** Context for expanding the per-version templates (secrets, env). */
+  /** Context for expanding the per-version templates (env). */
   templateContext: TemplateContext;
-  /** Derived credentials (e.g. the base64 basic-auth value) that logs must redact. */
-  sensitiveValues: string[];
 }
 
 const METHODS = ['GET', 'POST', 'HEAD'];
 /** Variables every per-version template may use besides the matched groups. */
 const OPERATION_VARS = ['id', 'version', 'targetDir'];
 
-function expandRecord(
-  record: Record<string, string>,
-  ctx: TemplateContext,
-): Record<string, string> {
-  return Object.fromEntries(Object.entries(record).map(([k, v]) => [k, expandTemplate(v, ctx)]));
-}
+/** Fields that were removed on purpose; they get a clear message instead of being ignored. */
+const LOGIN_FIELDS = ['auth', 'ca', 'strictSSL'];
 
 function parseMatch(raw: unknown): HttpMatchConfig {
   if (!isObject(raw)) {
@@ -139,9 +129,11 @@ export function parseHttpSource(
   raw: Record<string, unknown>,
   ctx: TemplateContext,
 ): HttpSourceConfig {
+  rejectLoginFields(raw);
   if (!isObject(raw.index)) {
     throw new SourceConfigError('"index" is required: { "url": … }');
   }
+  rejectLoginFields(raw.index, 'index.');
   const method = (optionalString(raw.index.method, 'index.method') ?? 'GET').toUpperCase();
   if (!METHODS.includes(method)) {
     throw new SourceConfigError(`"index.method" must be one of ${METHODS.join(', ')}`);
@@ -150,7 +142,6 @@ export function parseHttpSource(
   const index = {
     url: expandTemplate(requiredString(raw.index.url, 'index.url'), ctx),
     method,
-    headers: expandRecord(stringRecord(raw.index.headers, 'index.headers'), ctx),
     body: indexBody === undefined ? undefined : expandTemplate(indexBody, ctx),
   };
   const match = parseMatch(raw.match);
@@ -158,29 +149,17 @@ export function parseHttpSource(
   if (!isObject(raw.download)) {
     throw new SourceConfigError('"download" is required: { "url": … }');
   }
-  const download = {
-    url: requiredString(raw.download.url, 'download.url'),
-    headers: stringRecord(raw.download.headers, 'download.headers'),
-  };
+  rejectLoginFields(raw.download, 'download.');
+  const download = { url: requiredString(raw.download.url, 'download.url') };
   const releaseNotesUrl = isObject(raw.releaseNotes)
     ? optionalString(raw.releaseNotes.url, 'releaseNotes.url')
     : undefined;
   checkTemplates(
     {
       'download.url': download.url,
-      ...Object.fromEntries(
-        Object.entries(download.headers).map(([k, v]) => [`download.headers.${k}`, v]),
-      ),
       ...(releaseNotesUrl ? { 'releaseNotes.url': releaseNotesUrl } : {}),
     },
     match,
-    ctx,
-  );
-
-  const { authorization, sensitive } = parseAuth(raw.auth, ctx);
-  // `strictSSL` and `ca` may be set on the source or, as in older examples, on `index`.
-  const tls = parseTls(
-    { strictSSL: raw.strictSSL ?? raw.index.strictSSL, ca: raw.ca ?? raw.index.ca },
     ctx,
   );
 
@@ -191,9 +170,22 @@ export function parseHttpSource(
     match,
     download,
     releaseNotesUrl,
-    authorization,
-    ...tls,
     templateContext: ctx,
-    sensitiveValues: sensitive,
   };
+}
+
+/**
+ * Login and TLS settings are not supported: Leuchtturm does not handle credentials. Say so
+ * clearly instead of silently sending requests without them.
+ */
+function rejectLoginFields(raw: Record<string, unknown>, prefix = ''): void {
+  for (const field of [...LOGIN_FIELDS, 'headers']) {
+    if (raw[field] !== undefined) {
+      throw new SourceConfigError(
+        `"${prefix}${field}" is not supported: Leuchtturm does not handle logins or ` +
+          'certificates. For a server that needs a login, use a "script" source, which ' +
+          'signs in itself (see docs/sources/script.md).',
+      );
+    }
+  }
 }

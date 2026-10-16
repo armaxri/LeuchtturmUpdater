@@ -13,7 +13,7 @@ import * as path from 'node:path';
 
 import { activeWebview, launchWorkbench, runCommand } from '../electron';
 import { removeTempDir } from '../paths';
-import { buildScenario, JENKINS_SECRET } from '../scenario';
+import { buildScenario } from '../scenario';
 
 const step = (text: string) => console.log(`- ${text}`); // eslint-disable-line no-console
 
@@ -49,41 +49,67 @@ async function main(): Promise<void> {
     // VS Code's own dialogs instead of native ones (macOS), so Playwright can answer them.
     'window.dialogStyle': 'custom',
   });
-  const extraShare = path.join(scenario.root, 'team-share');
-  await fs.mkdir(extraShare);
   try {
     step('starting VS Code');
     const { app, page } = await launchWorkbench(scenario, { width: 1400, height: 900 });
     try {
-      step('the Leuchtturm view has an "Add Source…" button');
+      step('the Leuchtturm view has an "Add Source…" button; it asks for a link');
       await runCommand(page, 'View: Show Leuchtturm');
       await page.locator('.part.sidebar [aria-label^="Add Source"]').first().click();
       const form = activeWebview(page);
+      const lookUp = async (input: string) => {
+        await form.locator('#discover-input').fill(input);
+        await form.locator('#discover-run').click();
+        await form.locator('#discover-result').waitFor();
+      };
 
-      step('adding a file source through the form');
-      await form.locator('[data-type="file"]').click();
-      await form.locator('#source-name').fill('team-share');
-      await form.locator('#field-path').fill(extraShare);
-      await form.locator('#field-recursive').check();
-      await form.locator('#save:not([disabled])').click();
-      await form.getByText('Saved "team-share" to your user settings.').waitFor();
+      step('pasting the "Last Successful Artifacts" link of a Jenkins job finds its extension');
+      await lookUp(`${scenario.jenkinsUrl}/job/demo-ci/lastSuccessfulBuild/artifact/`);
+      await form.getByText('Found 1 extension').waitFor();
+      await form.locator('#discover-result').getByText('leuchtturm-demo.ci').waitFor();
+      await form.locator('#discover-result td', { hasText: '2.1.0' }).waitFor();
+      await form.getByText(/older versions can be installed too/).waitFor();
+      assert.equal(await form.locator('#discover-name').inputValue(), 'demo-ci');
+
+      step('saving it writes a complete http source, no regex typed by the user');
+      await form.locator('#discover-save').click();
+      await form.locator('h1', { hasText: 'demo-ci' }).waitFor();
       await eventually('the source in settings.json', async () => {
-        assert.deepEqual((await userSources(scenario.userDataDir))['team-share'], {
-          type: 'file',
-          path: extraShare,
-          recursive: true,
-        });
+        const saved = (await userSources(scenario.userDataDir))['demo-ci'] as
+          { type?: string; match?: { jsonPath?: string }; download?: { url?: string } } | undefined;
+        assert.equal(saved?.type, 'http');
+        assert.equal(saved?.match?.jsonPath, '$.builds[*].artifacts[*]');
+        assert.match(saved?.download?.url ?? '', /\/job\/demo-ci\/\$\{number\}\/artifact\//);
       });
       // The other sources are untouched and keep their order.
       const names = Object.keys(await userSources(scenario.userDataDir));
       assert.deepEqual(names.slice(0, 2), ['share', 'offline']);
-      assert.equal(names.at(-1), 'team-share');
+      assert.equal(names.at(-1), 'demo-ci');
 
-      step('testing the saved source shows the listing inline');
+      step('Test on the saved source lists what it finds');
       await form.locator('#test').click();
-      await form.locator('#test-text').getByText('Nothing found.').waitFor();
+      await form
+        .locator('#test-text')
+        .getByText(/matched {2}leuchtturm-demo\.ci 2\.1\.0/)
+        .waitFor();
 
-      step('opening an existing http source fills the form, credentials included');
+      step('a Jenkins that needs a login points to script sources');
+      await form.locator('#add-source').click();
+      await lookUp(scenario.protectedJenkinsUrl);
+      await form.getByText(/needs a login/).waitFor();
+      await form.getByText(/does not handle logins or passwords/).waitFor();
+      await form.getByRole('button', { name: 'Set Up a Script Source' }).waitFor();
+
+      step('a folder works too, and the suggested name is never taken');
+      await lookUp(scenario.share);
+      await form.getByText(/Found \d+ extensions/).waitFor();
+      assert.equal(await form.locator('#discover-name').inputValue(), 'share-2');
+
+      step('text that is no link explains what to paste');
+      await lookUp('just some words');
+      await form.getByText(/is not a link, a folder or an npm package name/).waitFor();
+
+      step('an existing source opens in the detailed form');
       await form.locator('[data-source="jenkins"]').click();
       assert.match(
         await form.locator('#field-index-url').inputValue(),
@@ -94,12 +120,8 @@ async function main(): Promise<void> {
         '$.builds[*].artifacts[*]',
       );
       assert.equal(await form.locator('#field-match-where').inputValue(), 'result: SUCCESS');
-      assert.ok(await form.locator('#auth-basic').isChecked());
-      assert.equal(
-        await form.locator('#field-auth-basic-password').inputValue(),
-        `\${secret:${JENKINS_SECRET.name}}`,
-      );
-      await form.getByText(`The credential "${JENKINS_SECRET.name}" is not stored yet`).waitFor();
+      // No credential fields anywhere.
+      assert.equal(await form.locator('[id^="field-auth"], [id^="auth-"]').count(), 0);
 
       step('an invalid edit is reported and cannot be saved; Revert restores it');
       await form.locator('#field-download-url').fill('');
@@ -112,14 +134,8 @@ async function main(): Promise<void> {
       await form.locator('#field-index-url').fill('https://changed.example/');
       await form.locator('[data-source="share"]').click();
       await form.getByText('This source has unsaved changes.').waitFor();
-      await form.getByRole('button', { name: 'Keep editing' }).click();
+      await form.getByRole('button', { name: 'Keep Editing' }).click();
       assert.equal(await form.locator('#field-index-url').inputValue(), 'https://changed.example/');
-      await form.getByRole('button', { name: 'Revert' }).click();
-
-      step('switching credentials to a token keeps the form consistent');
-      await form.locator('#auth-bearer').check();
-      await form.locator('#field-auth-bearer').fill('${secret:ci-token}');
-      await form.getByText('The credential "ci-token" is not stored yet').waitFor();
       await form.getByRole('button', { name: 'Revert' }).click();
 
       step('"Edit Source" on a problem node opens that source');
@@ -134,11 +150,11 @@ async function main(): Promise<void> {
       await form.locator('h1', { hasText: 'offline' }).waitFor();
 
       step('deleting asks for confirmation (modal dialog, answered with Delete)');
-      await form.locator('[data-source="team-share"]').click();
+      await form.locator('[data-source="demo-ci"]').click();
       await form.getByRole('button', { name: 'Delete' }).click();
       await page.locator('.monaco-dialog-box .monaco-button', { hasText: 'Delete' }).click();
       await eventually('the source removed from settings.json', async () => {
-        assert.equal((await userSources(scenario.userDataDir))['team-share'], undefined);
+        assert.equal((await userSources(scenario.userDataDir))['demo-ci'], undefined);
       });
 
       step('the Settings page links to the form');

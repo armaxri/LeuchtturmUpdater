@@ -11,11 +11,21 @@ Milestone M6: polish.
   `http.noProxy`, proxy login). Verified by the integration tests, which send all traffic
   through a local proxy.
 - README screenshots, rendered automatically from the demo scenario (`npm run screenshots`).
-- Source editor: **Leuchtturm: Manage Sources** (the **+** in the view, _Edit Source_ on tree
-  items, a link on the Settings page) shows a form per source type. It validates with the same
-  rules as the checks, offers stored credentials and stores new ones, and tests the unsaved
-  form. VS Code's Settings page cannot edit nested objects, so this replaces hand-editing
-  settings.json. Tested end to end with Playwright (`npm run test:ui`).
+- **Add Source from a link**: paste where you download the extension (a Jenkins job or its
+  "Last Successful Artifacts", a web page with `.vsix` links, a folder, an npm package name);
+  Leuchtturm recognises it, shows the extensions and versions it found, and writes the
+  configuration. No regex or JSONPath needed. Tested end to end with Playwright
+  (`npm run test:ui`).
+- Source editor: **Leuchtturm: Manage Sources** (_Edit Source_ on tree items, a link on the
+  Settings page) shows a detailed form per source type, validated with the same rules as the
+  checks, with Test on the unsaved form. VS Code's Settings page cannot edit nested objects.
+- **No credential handling any more**: removed `auth`, custom headers, `ca`/`strictSSL`,
+  `${secret:…}`, the secret storage and _Store Credential_. Servers that need a login are
+  reached through script sources, which sign in themselves (the Jenkins example shows how);
+  script download responses no longer carry headers. Old settings show a problem that says so.
+- `npm` sources run the user's own npm CLI (`npm view`, `npm search`, `npm pack`), so
+  registries, logins, proxies and certificates come from npm's configuration. Leuchtturm no
+  longer reads `.npmrc`; `registry` is optional. Deprecated versions are no longer hidden.
 - Settings page: _Sources_ comes first instead of last (alphabetical order hid it).
 - Remote windows (Dev Containers, Remote-SSH, WSL): `leuchtturm.sources` and
   `leuchtturm.script.enabled` now have `"scope": "application"`. With `machine`, VS Code read

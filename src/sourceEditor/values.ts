@@ -4,7 +4,7 @@
  * removes the key, and parents that become empty, so settings.json stays tidy.
  */
 
-import type { AuthMode, FieldSpec } from './formSpec';
+import type { FieldSpec } from './formSpec';
 
 export type RawSource = Record<string, unknown>;
 
@@ -108,38 +108,6 @@ export function fromInput(field: FieldSpec, input: string | boolean): unknown {
     default:
       return text === '' ? undefined : text;
   }
-}
-
-/** Which credentials block a source uses. */
-export function authMode(source: RawSource): AuthMode {
-  const auth = source.auth;
-  if (!isObject(auth)) {
-    return 'none';
-  }
-  if (isObject(auth.basic)) {
-    return 'basic';
-  }
-  if (typeof auth.token === 'string') {
-    return 'token';
-  }
-  return typeof auth.bearer === 'string' ? 'bearer' : 'none';
-}
-
-/** Switches the credentials block, keeping values that still fit. */
-export function setAuthMode(source: RawSource, mode: AuthMode): RawSource {
-  const current = authMode(source);
-  if (mode === current) {
-    return source;
-  }
-  if (mode === 'none') {
-    return setPath(source, 'auth', undefined);
-  }
-  if (mode === 'basic') {
-    return setPath(source, 'auth', { basic: { user: '', password: '' } });
-  }
-  // bearer and token are the same header; carry the value over.
-  const token = getPath(source, `auth.${current}`);
-  return setPath(source, 'auth', { [mode]: typeof token === 'string' ? token : '' });
 }
 
 /** Stable JSON for "has this draft changed?" comparisons. */

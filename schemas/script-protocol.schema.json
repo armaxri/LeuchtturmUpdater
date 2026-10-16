@@ -80,9 +80,8 @@
             "url": {
               "type": "string",
               "pattern": "^https?://",
-              "description": "an http:// or https:// URL"
-            },
-            "headers": { "type": "object", "additionalProperties": { "type": "string" } }
+              "description": "an http:// or https:// URL that needs no login (otherwise download the file yourself and answer with its path)"
+            }
           }
         }
       ]

@@ -45,6 +45,7 @@ export async function launchWorkbench(
   }
   const app = await electron.launch({
     executablePath,
+    env: { ...process.env, ...scenario.env } as Record<string, string>,
     args: [
       scenario.workspace,
       ...profile,

@@ -13,3 +13,4 @@
 !docs/**
 !examples/**
 !schemas/**
+**/__pycache__/**

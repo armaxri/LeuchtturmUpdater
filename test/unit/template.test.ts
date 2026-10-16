@@ -1,18 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  expandPath,
-  expandTemplate,
-  findSecretNames,
-  TemplateError,
-} from '../../src/util/template';
+import { expandPath, expandTemplate, TemplateError } from '../../src/util/template';
 
 describe('expandTemplate', () => {
   const ctx = {
     vars: { id: 'corp.linter', version: '1.4.1', empty: '' },
     ref: { build: '312' },
     env: { TOKEN: 'abc' },
-    secrets: { jenkins: 's3cret' },
     userHome: '/home/me',
     platform: 'linux-x64',
   };
@@ -20,10 +14,10 @@ describe('expandTemplate', () => {
   it('substitutes every variable kind', () => {
     expect(
       expandTemplate(
-        '${id}-${version}/${ref.build}?t=${env:TOKEN}&s=${secret:jenkins}&h=${userHome}&p=${platform}&e=${empty}',
+        '${id}-${version}/${ref.build}?t=${env:TOKEN}&h=${userHome}&p=${platform}&e=${empty}',
         ctx,
       ),
-    ).toBe('corp.linter-1.4.1/312?t=abc&s=s3cret&h=/home/me&p=linux-x64&e=');
+    ).toBe('corp.linter-1.4.1/312?t=abc&h=/home/me&p=linux-x64&e=');
   });
 
   it('leaves text without variables untouched', () => {
@@ -33,7 +27,7 @@ describe('expandTemplate', () => {
   it('throws on unknown or unset variables instead of substituting ""', () => {
     expect(() => expandTemplate('${nope}', ctx)).toThrow(TemplateError);
     expect(() => expandTemplate('${env:MISSING}', ctx)).toThrow(/MISSING/);
-    expect(() => expandTemplate('${secret:other}', ctx)).toThrow(/Store Credential/);
+    expect(() => expandTemplate('${secret:other}', ctx)).toThrow(/does not handle credentials/);
     expect(() => expandTemplate('${ref.missing}', ctx)).toThrow(TemplateError);
     expect(() => expandTemplate('${constructor}', ctx)).toThrow(TemplateError);
   });
@@ -52,14 +46,5 @@ describe('expandPath', () => {
     expect(expandPath('~', { userHome: '/home/me' })).toBe('/home/me');
     expect(expandPath('/a/~/b', { userHome: '/home/me' })).toBe('/a/~/b');
     expect(expandPath('~other/x', { userHome: '/home/me' })).toBe('~other/x');
-  });
-});
-
-describe('findSecretNames', () => {
-  it('collects unique secret names', () => {
-    expect(findSecretNames('Basic ${secret:a}', '${secret:b} ${secret:a}', '${env:c}')).toEqual([
-      'a',
-      'b',
-    ]);
   });
 });

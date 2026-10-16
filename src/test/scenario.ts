@@ -15,13 +15,17 @@
  *   workspace/.vscode/settings.json               → tries to inject the evil source
  *   user-data/User/settings.json                  → the real (user-level) configuration
  *
- * Plus two local servers (see fakeServer.ts), running while the scenario is open:
- *   fake Jenkins (http, basic auth with ${secret:jenkins-demo}, jsonPath matcher)
+ * Plus local servers (see fakeServer.ts), running while the scenario is open:
+ *   fake Jenkins (http, no login, jsonPath matcher)
  *     job demo-ci: #42 leuchtturm-demo.ci 2.1.0 (+ CHANGELOG.md), #41 2.0.0 ← pre-installed,
  *     #40 failed
- *   web server listing over HTTPS with the test CA (regex matcher)
+ *   a second fake Jenkins that needs a login (job secret-ci): not a source; pasting its link
+ *     into "Add Source" must point to script sources, as Leuchtturm handles no logins
+ *   web server listing over HTTPS; its certificate is trusted like a company CA installed on
+ *     the machine (NODE_EXTRA_CA_CERTS, see `env`), with no setting in Leuchtturm
  *     /vsix/leuchtturm-demo.web-0.3.0.vsix        → not installed
- *   npm registry (token from the scenario's own .npmrc, scope search)
+ *   npm registry that needs a token: configured for npm itself in the scenario's own .npmrc
+ *   (registry, token, proxy), like a user's `npm login`; Leuchtturm just runs npm
  *     @leuchtturm-demo/registry 3.0.0 ← pre-installed, 3.1.0 ("vscodeExtension" field)
  *     @leuchtturm-demo/packed 0.9.0               → ID derived from the .vsix inside
  *
@@ -59,9 +63,6 @@ export const IDS = {
 /** Token the fake npm registry expects; the scenario writes it into its own `.npmrc`. */
 export const NPM_TOKEN = 'npm-demo-token';
 
-/** The fake Jenkins expects this; the user stores it with "Store Credential…". */
-export const JENKINS_SECRET = { name: 'jenkins-demo', value: 'demo-password' } as const;
-
 export interface Scenario {
   root: string;
   share: string;
@@ -75,6 +76,13 @@ export interface Scenario {
   npmUrl: string;
   /** Company-style proxy that all requests go through (`http.proxy`). */
   proxyUrl: string;
+  /** Job page of the Jenkins that needs a login (for the "needs a login" case). */
+  protectedJenkinsUrl: string;
+  /**
+   * Environment for the VS Code process: trust for the HTTPS demo server (like a company CA
+   * installed on the machine) and the npm configuration (like the user's own ~/.npmrc).
+   */
+  env: Record<string, string>;
   /** Python used by the `script` source; undefined if none was found (source omitted). */
   python?: string;
   /** Stops the fake servers. */
@@ -219,7 +227,6 @@ export async function buildScenario(
 
   const servers: FakeServer[] = [
     await startFakeServer({
-      auth: { user: 'demo', password: JENKINS_SECRET.value },
       jenkins: {
         job: 'demo-ci',
         builds: [
@@ -227,8 +234,7 @@ export async function buildScenario(
             number: 42,
             result: 'SUCCESS',
             artifacts: { [`dist/${IDS.ci}-2.1.0.vsix`]: ci('2.1.0') },
-            changelog:
-              '## 2.1.0\n- Built by the fake Jenkins\n- Fetched with your stored credential\n',
+            changelog: '## 2.1.0\n- Built by the fake Jenkins\n- Found through its JSON API\n',
           },
           {
             number: 41,
@@ -241,18 +247,39 @@ export async function buildScenario(
     }),
     await startFakeServer({ tls: true, autoindex: { dir: webDir } }),
     await startFakeServer({ npm: { token: NPM_TOKEN, packages: npmPackages } }),
+    await startFakeServer({
+      auth: { user: 'demo', password: 'demo-password' },
+      jenkins: {
+        job: 'secret-ci',
+        builds: [
+          { number: 1, result: 'SUCCESS', artifacts: { [`${IDS.ci}-2.1.0.vsix`]: ci('2.1.0') } },
+        ],
+      },
+    }),
   ];
   const proxy = await startFakeProxy();
   servers.push(proxy as unknown as FakeServer);
   // The servers listen on 127.0.0.1, but the sources use names only the proxy can resolve,
   // so every request must really go through the proxy.
-  const [jenkins, web, npm] = (servers as [FakeServer, FakeServer, FakeServer]).map((s, i) => ({
+  const [jenkins, web, npm, protectedJenkins] = (
+    servers as [FakeServer, FakeServer, FakeServer, FakeServer]
+  ).map((s, i) => ({
     ...s,
-    url: proxyOnlyUrl(['jenkins', 'web', 'npm'][i]!, s.url),
-  })) as [FakeServer, FakeServer, FakeServer];
-  // Credentials the npm way, in a scenario-local .npmrc (your own ~/.npmrc is not touched).
+    url: proxyOnlyUrl(['jenkins', 'web', 'npm', 'login'][i]!, s.url),
+  })) as [FakeServer, FakeServer, FakeServer, FakeServer];
+  // npm is configured the npm way, in a scenario-local .npmrc (your own ~/.npmrc is not
+  // touched): which registry serves the scope, its token, and the company proxy.
   const npmrc = path.join(root, 'npmrc');
-  await fs.writeFile(npmrc, `${npm.url.replace(/^https?:/, '')}/npm/:_authToken=${NPM_TOKEN}\n`);
+  await fs.writeFile(
+    npmrc,
+    [
+      `@leuchtturm-demo:registry=${npm.url}/npm/`,
+      `${npm.url.replace(/^https?:/, '')}/npm/:_authToken=${NPM_TOKEN}`,
+      `proxy=${proxy.url}`,
+      `https-proxy=${proxy.url}`,
+      '',
+    ].join('\n'),
+  );
 
   // Workspace settings try to add a source. Leuchtturm must ignore it (SPEC §9).
   await fs.mkdir(path.join(workspace, '.vscode'), { recursive: true });
@@ -281,7 +308,6 @@ export async function buildScenario(
         index: {
           url: `${jenkins.url}/job/demo-ci/api/json?tree=builds[number,result,artifacts[fileName,relativePath]]{0,20}`,
         },
-        auth: { basic: { user: 'demo', password: `\${secret:${JENKINS_SECRET.name}}` } },
         match: {
           jsonPath: '$.builds[*].artifacts[*]',
           where: { result: 'SUCCESS' },
@@ -299,14 +325,9 @@ export async function buildScenario(
             'href="(?<file>(?<id>leuchtturm-demo\\.[\\w-]+)-(?<version>\\d+\\.\\d+\\.\\d+)\\.vsix)"',
         },
         download: { url: `${web.url}/vsix/\${file}` },
-        ca: TLS_CERT,
       },
-      npm: {
-        type: 'npm',
-        registry: `${npm.url}/npm/`,
-        scope: '@leuchtturm-demo',
-        npmrc,
-      },
+      // No registry, token or proxy here: npm knows them from its own configuration.
+      npm: { type: 'npm', scope: '@leuchtturm-demo' },
       ...(python
         ? {
             script: {
@@ -354,6 +375,14 @@ export async function buildScenario(
     webUrl: web.url,
     npmUrl: `${npm.url}/npm/`,
     proxyUrl: proxy.url,
+    protectedJenkinsUrl: `${protectedJenkins.url}/job/secret-ci/`,
+    env: {
+      NODE_EXTRA_CA_CERTS: TLS_CERT,
+      // Both spellings: `npm run …` puts its own lowercase npm_config_userconfig into the
+      // environment of everything it starts, and npm prefers that one.
+      NPM_CONFIG_USERCONFIG: npmrc,
+      npm_config_userconfig: npmrc,
+    },
     python,
     close: async () => {
       await Promise.all(servers.map((s) => s.close()));

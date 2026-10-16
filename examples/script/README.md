@@ -3,13 +3,13 @@
 Python 3.8+, standard library only. Each script imports `_leuchtturm.py` (copy it next to your
 own script). The protocol is described in [`docs/sources/script.md`](../../docs/sources/script.md).
 
-| Script               | Shows                                                                                                     |
-| -------------------- | --------------------------------------------------------------------------------------------------------- |
-| `minimal_static.py`  | The smallest possible source: a hard-coded list, downloads by URL.                                        |
-| `folder_source.py`   | Scanning a folder or share, `path` downloads, `sha256`, release notes from `.md` files.                   |
-| `jenkins_source.py`  | Jenkins JSON API, credentials from environment variables, `ref` carrying the build number, release notes. |
-| `manifest_source.py` | A `versions.json` manifest on a web server.                                                               |
-| `_leuchtturm.py`     | Helper: argument parsing, `emit()`, `fail()`, `not_supported()`, `ref()`, `sha256_file()`.                |
+| Script               | Shows                                                                                                   |
+| -------------------- | ------------------------------------------------------------------------------------------------------- |
+| `minimal_static.py`  | The smallest possible source: a hard-coded list, downloads by URL.                                      |
+| `folder_source.py`   | Scanning a folder or share, `path` downloads, `sha256`, release notes from `.md` files.                 |
+| `jenkins_source.py`  | A Jenkins that needs a login: the script signs in and downloads itself, `ref` carries the build number. |
+| `manifest_source.py` | A `versions.json` manifest on a web server.                                                             |
+| `_leuchtturm.py`     | Helper: argument parsing, `emit()`, `fail()`, `not_supported()`, `ref()`, `sha256_file()`.              |
 
 ## Try them on the command line
 
@@ -51,13 +51,12 @@ On Windows, use `py` instead of `python3`.
     "script": "~/leuchtturm/jenkins_source.py",
     "env": {
       "JENKINS_URL": "https://jenkins.corp.example",
-      "JENKINS_JOB": "corp-linter",
-      "JENKINS_USER": "ci-reader",
-      "JENKINS_TOKEN": "${secret:jenkins}"
+      "JENKINS_JOB": "corp-linter"
     }
   }
 }
 ```
 
-Store `jenkins` with **Leuchtturm: Store Credential…**. The first run of each script asks for
-your approval. More snippets: [`examples/settings/script.jsonc`](../settings/script.jsonc).
+`jenkins_source.py` reads `JENKINS_USER` and `JENKINS_TOKEN` from your environment (scripts
+get your normal environment), so Leuchtturm never sees them. Swap that part for whatever your
+company uses. The first run of each script asks for your approval. More snippets: [`examples/settings/script.jsonc`](../settings/script.jsonc).

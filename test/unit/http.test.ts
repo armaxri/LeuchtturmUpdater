@@ -6,9 +6,8 @@ import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { startFakeServer, type FakeServer } from '../../src/test/fakeServer';
-import { TLS_CERT } from '../../src/test/paths';
 import { CancellationSource, NEVER_CANCELLED } from '../../src/util/cancellation';
-import { basicAuth, httpDownload, httpRequest, HttpError } from '../../src/util/http';
+import { httpDownload, httpRequest, HttpError } from '../../src/util/http';
 import { tempDir } from './helpers';
 
 const servers: { close(): Promise<void> }[] = [];
@@ -39,7 +38,7 @@ async function raw(handler: http.RequestListener): Promise<string> {
 const opts = { timeoutMs: 5000, token: NEVER_CANCELLED };
 
 describe('httpRequest', () => {
-  it('returns the body and explains auth failures', async () => {
+  it('returns the body and explains that a login is needed', async () => {
     const dir = await tempDir();
     await fs.writeFile(path.join(dir, 'a.vsix'), 'x');
     const s = await fake({
@@ -53,13 +52,9 @@ describe('httpRequest', () => {
 
     const err = await httpRequest(`${s.url}/job/j/api/json`, opts).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(HttpError);
-    expect((err as HttpError).message).toMatch(/HTTP 401 Unauthorized — check credentials/);
-
-    const ok = await httpRequest(`${s.url}/job/j/api/json`, {
-      ...opts,
-      headers: { authorization: basicAuth('u', 'p') },
-    });
-    expect(JSON.parse(ok.body.toString())).toEqual({ builds: [] });
+    expect((err as HttpError).message).toMatch(
+      /HTTP 401 Unauthorized — the server needs a login\. Leuchtturm does not handle logins; use a script source/,
+    );
   });
 
   it('follows redirects and drops credentials on a different origin', async () => {
@@ -95,16 +90,9 @@ describe('httpRequest', () => {
     await expect(pending).rejects.toThrow(/Cancelled/);
   });
 
-  it('verifies TLS certificates unless told otherwise', async () => {
+  it('always verifies TLS certificates (trust comes from the system, not from settings)', async () => {
     const s = await fake({ tls: true, autoindex: { dir: await tempDir() } });
     await expect(httpRequest(`${s.url}/vsix/`, opts)).rejects.toThrow(/self[- ]signed/i);
-    const insecure = await httpRequest(`${s.url}/vsix/`, { ...opts, strictSSL: false });
-    expect(insecure.status).toBe(200);
-    const withCa = await httpRequest(`${s.url}/vsix/`, {
-      ...opts,
-      ca: await fs.readFile(TLS_CERT),
-    });
-    expect(withCa.status).toBe(200);
   });
 
   it('limits the body size', async () => {

@@ -5,7 +5,7 @@ import * as path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { parseConfig, referencedSecrets } from '../../src/config';
+import { parseConfig } from '../../src/config';
 import { ROOT } from '../../src/test/paths';
 import { findVariableNames } from '../../src/util/template';
 
@@ -44,14 +44,12 @@ describe('examples/settings', () => {
     it(`${file} is valid`, () => {
       const json = parseJsonc(fs.readFileSync(path.join(dir, file), 'utf8'));
       const sources = json['leuchtturm.sources'];
-      const secrets = Object.fromEntries(referencedSecrets(sources).map((n) => [n, 'x']));
       const env = Object.fromEntries(
         findVariableNames(JSON.stringify(sources))
           .filter((n) => n.startsWith('env:'))
           .map((n) => [n.slice(4), '/x']),
       );
       const config = parseConfig((key) => json[`leuchtturm.${key}`], {
-        secrets,
         env,
         userHome: '/home/me',
       });

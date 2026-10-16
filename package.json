@@ -79,12 +79,6 @@
         "icon": "$(beaker)"
       },
       {
-        "command": "leuchtturm.setSecret",
-        "title": "Store Credential…",
-        "category": "Leuchtturm",
-        "icon": "$(key)"
-      },
-      {
         "command": "leuchtturm.approveScript",
         "title": "Allow Script Source…",
         "category": "Leuchtturm",
@@ -242,7 +236,7 @@
                 "properties": {
                   "url": {
                     "type": "string",
-                    "description": "URL. Supports ${env:NAME}, ${secret:NAME} and, for downloads, matched groups such as ${version}."
+                    "description": "URL. Supports ${env:NAME} and, for downloads, matched groups such as ${version}."
                   },
                   "method": {
                     "type": "string",
@@ -252,12 +246,6 @@
                       "HEAD"
                     ],
                     "default": "GET"
-                  },
-                  "headers": {
-                    "type": "object",
-                    "additionalProperties": {
-                      "type": "string"
-                    }
                   },
                   "body": {
                     "type": "string"
@@ -306,25 +294,7 @@
                 "properties": {
                   "url": {
                     "type": "string",
-                    "description": "URL. Supports ${env:NAME}, ${secret:NAME} and, for downloads, matched groups such as ${version}."
-                  },
-                  "method": {
-                    "type": "string",
-                    "enum": [
-                      "GET",
-                      "POST",
-                      "HEAD"
-                    ],
-                    "default": "GET"
-                  },
-                  "headers": {
-                    "type": "object",
-                    "additionalProperties": {
-                      "type": "string"
-                    }
-                  },
-                  "body": {
-                    "type": "string"
+                    "description": "URL. Supports ${env:NAME} and, for downloads, matched groups such as ${version}."
                   }
                 },
                 "description": "(http) Step 3: the download request. All matched groups, ${id} and ${version} are available."
@@ -338,42 +308,9 @@
                 },
                 "description": "(http) Optional release notes URL template."
               },
-              "auth": {
-                "type": "object",
-                "description": "(http, npm) Credentials for all requests of this source.",
-                "properties": {
-                  "basic": {
-                    "type": "object",
-                    "properties": {
-                      "user": {
-                        "type": "string"
-                      },
-                      "password": {
-                        "type": "string"
-                      }
-                    }
-                  },
-                  "bearer": {
-                    "type": "string"
-                  },
-                  "token": {
-                    "type": "string",
-                    "description": "(npm) Bearer token, e.g. \"${secret:nexus-token}\"."
-                  }
-                }
-              },
-              "strictSSL": {
-                "type": "boolean",
-                "default": true,
-                "description": "(http, npm) Set to false only for servers with a broken TLS setup. Prefer \"ca\"."
-              },
-              "ca": {
-                "type": "string",
-                "description": "(http, npm) Path to an extra trusted CA certificate (PEM)."
-              },
               "registry": {
                 "type": "string",
-                "description": "(npm) Registry URL, e.g. https://nexus.corp.example/repository/npm-internal/"
+                "description": "(npm) Registry URL. Leave out to use your npm configuration (`.npmrc`, `npm login`)."
               },
               "scope": {
                 "type": "string",
@@ -385,11 +322,6 @@
                   "type": "string"
                 },
                 "description": "(npm) Explicit package names. Takes precedence over \"scope\"; needed for registries without a search API."
-              },
-              "npmrc": {
-                "type": "string",
-                "default": "~/.npmrc",
-                "description": "(npm) .npmrc to read credentials from when \"auth\" is not set."
               },
               "command": {
                 "type": "string",
@@ -408,7 +340,7 @@
                 "additionalProperties": {
                   "type": "string"
                 },
-                "description": "(script) Extra environment variables (templated)."
+                "description": "(script) Extra environment variables. Values support ${env:NAME}."
               },
               "args": {
                 "type": "object",
@@ -596,11 +528,6 @@
           "command": "leuchtturm.clearSkipped",
           "when": "view == leuchtturm.updates",
           "group": "more@2"
-        },
-        {
-          "command": "leuchtturm.setSecret",
-          "when": "view == leuchtturm.updates",
-          "group": "more@3"
         },
         {
           "command": "leuchtturm.approveScript",

@@ -69,7 +69,7 @@ async function main(): Promise<void> {
         '--skip-release-notes',
       ],
       // The suite runs `docker` too; it inherits DOCKER_HOST from this process.
-      extensionTestsEnv: { LEUCHTTURM_IT_HOST_WORKSPACE: scenario.workspace },
+      extensionTestsEnv: { ...scenario.env, LEUCHTTURM_IT_HOST_WORKSPACE: scenario.workspace },
     });
   } finally {
     removeDevContainers(scenario.workspace);

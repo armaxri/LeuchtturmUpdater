@@ -1,7 +1,7 @@
 /**
  * What the source editor form shows for each source type. Plain data, shared by the extension
  * and the webview (which renders it generically). Field paths are dotted keys into the source
- * object as stored in `leuchtturm.sources`, e.g. `index.url` or `auth.basic.user`.
+ * object as stored in `leuchtturm.sources`, e.g. `index.url` or `match.jsonPath`.
  *
  * Fields that the form does not know are kept as they are when saving, so hand-written settings
  * never lose anything by being opened in the editor.
@@ -12,14 +12,12 @@ import type { SourceType } from '../sources/types';
 export type FieldKind =
   /** One line of text. */
   | 'text'
-  /** Text that may hold a password or token: offers stored credentials (`${secret:NAME}`). */
-  | 'secret'
   | 'number'
   | 'boolean'
   | 'select'
   /** List of strings, one per line. */
   | 'list'
-  /** String map, one `key: value` per line (headers, env, where). */
+  /** String map, one `key: value` per line (env, where). */
   | 'map';
 
 export interface FieldSpec {
@@ -37,15 +35,10 @@ export interface FieldSpec {
   advanced?: boolean;
 }
 
-/** How credentials are given: none, user and password, or a token. */
-export type AuthMode = 'none' | 'basic' | 'bearer' | 'token';
-
 export interface SectionSpec {
   title: string;
   help?: string;
   fields: readonly FieldSpec[];
-  /** The `auth` block, rendered as a choice between the listed modes. */
-  auth?: readonly AuthMode[];
 }
 
 export const TYPE_LABELS: Record<SourceType, string> = {
@@ -56,25 +49,6 @@ export const TYPE_LABELS: Record<SourceType, string> = {
 };
 
 export const DOCS_URL = 'https://github.com/armaxri/LeuchtturmUpdater/blob/main/docs/sources';
-
-const TLS_FIELDS: readonly FieldSpec[] = [
-  {
-    path: 'ca',
-    label: 'Extra CA certificate',
-    kind: 'text',
-    placeholder: '~/certs/corp-root-ca.pem',
-    help: 'PEM file of your company root certificate, for servers with an internal CA.',
-    advanced: true,
-  },
-  {
-    path: 'strictSSL',
-    label: 'Check TLS certificates',
-    kind: 'boolean',
-    defaultValue: true,
-    help: 'Turn off only for servers with a broken TLS setup; prefer the CA certificate above.',
-    advanced: true,
-  },
-];
 
 const COMMON_FIELDS: readonly FieldSpec[] = [
   {
@@ -156,13 +130,6 @@ export const TYPE_SECTIONS: Record<SourceType, readonly SectionSpec[]> = {
           options: ['GET', 'POST', 'HEAD'],
           advanced: true,
         },
-        {
-          path: 'index.headers',
-          label: 'Headers',
-          kind: 'map',
-          placeholder: 'Accept: application/json',
-          advanced: true,
-        },
         { path: 'index.body', label: 'Request body', kind: 'text', advanced: true },
       ],
     },
@@ -227,12 +194,6 @@ export const TYPE_SECTIONS: Record<SourceType, readonly SectionSpec[]> = {
           help: 'Matched groups, ${id} and ${version} are available.',
         },
         {
-          path: 'download.headers',
-          label: 'Headers',
-          kind: 'map',
-          advanced: true,
-        },
-        {
           path: 'releaseNotes.url',
           label: 'Release notes URL',
           kind: 'text',
@@ -242,7 +203,6 @@ export const TYPE_SECTIONS: Record<SourceType, readonly SectionSpec[]> = {
         },
       ],
     },
-    { title: 'Credentials', fields: TLS_FIELDS, auth: ['none', 'basic', 'bearer'] },
   ],
   npm: [
     {
@@ -252,8 +212,8 @@ export const TYPE_SECTIONS: Record<SourceType, readonly SectionSpec[]> = {
           path: 'registry',
           label: 'Registry URL',
           kind: 'text',
-          required: true,
-          placeholder: 'https://nexus.corp.example/repository/npm-internal/',
+          placeholder: 'leave empty to use your npm configuration',
+          help: 'Leuchtturm runs your npm, so logins and registries set up for npm work here too.',
         },
         {
           path: 'scope',
@@ -269,21 +229,6 @@ export const TYPE_SECTIONS: Record<SourceType, readonly SectionSpec[]> = {
           placeholder: '@corp-vscode/linter',
           help: 'For registries without a search API. Used instead of the scope when set.',
         },
-      ],
-    },
-    {
-      title: 'Credentials',
-      help: 'Without credentials here, Leuchtturm reads them from your .npmrc, like npm does.',
-      auth: ['none', 'token', 'basic'],
-      fields: [
-        {
-          path: 'npmrc',
-          label: '.npmrc file',
-          kind: 'text',
-          placeholder: '~/.npmrc',
-          advanced: true,
-        },
-        ...TLS_FIELDS,
       ],
     },
   ],
@@ -310,8 +255,8 @@ export const TYPE_SECTIONS: Record<SourceType, readonly SectionSpec[]> = {
           path: 'env',
           label: 'Environment',
           kind: 'map',
-          placeholder: 'JENKINS_TOKEN: ${secret:jenkins}',
-          help: 'Values support ${env:NAME} and ${secret:NAME}.',
+          placeholder: 'ARTIFACT_HOST: files.corp.example',
+          help: 'Values support ${env:NAME}. The script also gets your normal environment.',
         },
         { path: 'cwd', label: 'Working folder', kind: 'text', advanced: true },
         {
@@ -350,9 +295,6 @@ export function knownPaths(type: SourceType): string[] {
   const paths = ['type'];
   for (const section of sectionsFor(type)) {
     paths.push(...section.fields.map((f) => f.path));
-    if (section.auth) {
-      paths.push('auth');
-    }
   }
   return paths;
 }

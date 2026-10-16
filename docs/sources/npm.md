@@ -2,8 +2,16 @@
 
 If your company already runs an npm registry (Nexus, Artifactory, Verdaccio, GitHub Packages,
 GitLab), you can distribute extensions through it: each extension version is an npm package
-that contains the `.vsix`. Leuchtturm reads the registry's HTTP API directly; the npm CLI is
-only needed for publishing.
+that contains the `.vsix`.
+
+Leuchtturm runs **your own npm** (`npm view`, `npm search`, `npm pack`). Whatever you set up for
+npm works here too: the registry for your scope, `npm login`, tokens in `.npmrc`, proxies and
+certificates. Leuchtturm itself reads no `.npmrc` and handles no tokens. If `npm view
+@corp-vscode/linter` works in a terminal, the source works. npm must be installed (it comes
+with Node.js).
+
+**The easy way:** run **Leuchtturm: Add Source…** and enter the package name
+(`@corp-vscode/linter`) or the scope (`@corp-vscode`).
 
 The approach is modelled on Garmin's _Private Extension Manager_ (npm packages that carry a
 `.vsix`). If you migrate existing packages, check them with **Leuchtturm: Test Source…** first.
@@ -13,41 +21,34 @@ The approach is modelled on Garmin's _Private Extension Manager_ (npm packages t
 "leuchtturm.sources": {
   "nexus": {
     "type": "npm",
-    "registry": "https://nexus.corp.example/repository/npm-internal/",
     "scope": "@corp-vscode"
   }
 }
 ```
 
-## Options
-
-| Field                                      | Default       | Description                                                                                                                                                                   |
-| ------------------------------------------ | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `registry`                                 | (required)    | Registry URL.                                                                                                                                                                 |
-| `scope`                                    |               | List every package of this scope (e.g. `@corp-vscode`) via the registry's search API.                                                                                         |
-| `packages`                                 |               | Explicit package names, e.g. `["@corp-vscode/linter"]`. Used instead of `scope` when set. Needed for registries whose search API is missing or limited (some Nexus versions). |
-| `auth`                                     | from `.npmrc` | `{ "token": "${secret:nexus-token}" }`, `{ "bearer": "…" }` or `{ "basic": { "user", "password" } }`.                                                                         |
-| `npmrc`                                    | `~/.npmrc`    | The `.npmrc` to read credentials from when `auth` is not set.                                                                                                                 |
-| `ca`, `strictSSL`                          |               | As for the [`http` source](http.md#options).                                                                                                                                  |
-| `timeout`, `include`, `exclude`, `enabled` |               | As for every source.                                                                                                                                                          |
-
-Either `scope` or `packages` is required.
-
-### Credentials
-
-Without `auth`, Leuchtturm reads the same `.npmrc` entries as the npm CLI and picks the most
-specific one for the registry URL:
+with the scope's registry configured for npm, e.g. in `~/.npmrc`:
 
 ```ini
-//nexus.corp.example/repository/npm-internal/:_authToken=${NPM_TOKEN}
-//nexus.corp.example/:_auth=dXNlcjpwYXNzd29yZA==
-//nexus.corp.example/:username=ci-reader
-//nexus.corp.example/:_password=cGFzc3dvcmQ=
+@corp-vscode:registry=https://nexus.corp.example/repository/npm-internal/
 ```
 
-`${VAR}` in `.npmrc` values is taken from the environment, as npm does. Tokens are masked in
-the log. Credentials are only sent to the registry's own host: a tarball served from another
-host (a CDN) is fetched without them.
+## Options
+
+| Field                                      | Default      | Description                                                                                                                                                                   |
+| ------------------------------------------ | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `scope`                                    |              | List every package of this scope (e.g. `@corp-vscode`) with `npm search`.                                                                                                     |
+| `packages`                                 |              | Explicit package names, e.g. `["@corp-vscode/linter"]`. Used instead of `scope` when set. Needed for registries whose search API is missing or limited (some Nexus versions). |
+| `registry`                                 | npm's config | Passed to npm as `--registry`. Leave it out to let npm's configuration decide (recommended).                                                                                  |
+| `timeout`, `include`, `exclude`, `enabled` |              | As for every source.                                                                                                                                                          |
+
+Either `scope` or `packages` is required. `auth`, `npmrc`, `ca` and `strictSSL` are not
+supported: configure npm itself instead, then npm and Leuchtturm both use it.
+
+### Logins
+
+A registry that needs a login works once npm can use it: run `npm login --registry …` (or put
+a token into `.npmrc` the way your registry documents it). If npm has no login, _Test Source_
+shows npm's own error, e.g. `E401 Unable to authenticate`.
 
 ## Package convention
 
@@ -59,10 +60,11 @@ host (a CDN) is fetched without them.
   3. the `.vsix` file name in the newest version's tarball (`corp.linter-1.4.1.vsix`).
      This costs one download per package and Leuchtturm session, so prefer option 1.
 - `displayName` in package.json is shown in the sidebar.
-- Deprecated versions (`npm deprecate`) are hidden.
+- All published versions are listed, including deprecated ones; prereleases only with
+  `leuchtturm.includePrerelease`.
 
-Installing downloads the tarball, verifies `dist.integrity` (or the older `dist.shasum`)
-against the registry, extracts the `.vsix` and installs it.
+Installing runs `npm pack <package>@<version>` (npm checks the package's integrity against the
+registry), extracts the `.vsix` and installs it.
 
 ## Publishing
 
@@ -117,17 +119,18 @@ Store a publish token as a CI secret and give npm an `.npmrc` that reads it:
     NPM_CONFIG_USERCONFIG: .npmrc-publish
 ```
 
-Users only need read access; give Leuchtturm a read-only token.
+Users only need read access through their own npm login.
 
 ## Debugging with Test Source
 
-**Leuchtturm: Test Source…** lists the registry requests with their status, the packages the
-scope search found, every version with the extension ID it maps to and its tarball URL, and
-every version that was skipped (not semver, deprecated, no tarball) or failed.
+**Leuchtturm: Test Source…** lists every npm command it ran, the registry npm uses for the scope,
+the packages the scope search found, every version with the extension ID it maps to, and
+npm's error message for anything that failed.
 
 ## Limits
 
-- Proxies are handled by VS Code, see [Proxies](../configuration.md#proxies).
+- Proxies and certificates are npm's own settings (`proxy`, `https-proxy`, `cafile` in
+  `.npmrc`), not VS Code's.
 - The scope search reads at most 2,500 packages.
 
 More snippets: [`examples/settings/npm.jsonc`](../../examples/settings/npm.jsonc).

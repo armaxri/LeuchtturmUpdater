@@ -18,7 +18,7 @@ import {
   type CommonSourceConfig,
 } from './sources/sourceConfig';
 import { SOURCE_TYPES, type ProblemAction, type SourceType } from './sources/types';
-import { findSecretNames, TemplateError, type TemplateContext } from './util/template';
+import { TemplateError, type TemplateContext } from './util/template';
 import { parseRange, type Range } from './version';
 
 export { DEFAULT_FILE_PATTERN, type FileSourceConfig } from './sources/fileConfig';
@@ -195,22 +195,6 @@ function parseTrackingEntry(raw: unknown): TrackingEntry | undefined {
     entry.pinRange = range;
   }
   return entry;
-}
-
-/** Secret names referenced anywhere in the sources setting, so the caller can prefetch them. */
-export function referencedSecrets(rawSources: unknown): string[] {
-  const strings: string[] = [];
-  const walk = (v: unknown): void => {
-    if (typeof v === 'string') {
-      strings.push(v);
-    } else if (Array.isArray(v)) {
-      v.forEach(walk);
-    } else if (isObject(v)) {
-      Object.values(v).forEach(walk);
-    }
-  };
-  walk(rawSources);
-  return findSecretNames(...strings);
 }
 
 /**

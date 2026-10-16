@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import { SourceEditorHost, type EditorDeps } from '../../src/sourceEditor/host';
-import type { ToWebview } from '../../src/sourceEditor/protocol';
+import type { Discovery, ToWebview } from '../../src/sourceEditor/protocol';
 
-function setup(initial: Record<string, unknown> = {}, options: { confirm?: boolean } = {}) {
+function setup(
+  initial: Record<string, unknown> = {},
+  options: { confirm?: boolean; discovery?: Discovery; folder?: string } = {},
+) {
   let sources: Record<string, unknown> = initial;
-  const stored = new Set<string>(['jenkins']);
   const posted: ToWebview[] = [];
   const writes: Record<string, unknown>[] = [];
   const deps: EditorDeps = {
@@ -15,14 +17,11 @@ function setup(initial: Record<string, unknown> = {}, options: { confirm?: boole
       writes.push(next);
       return Promise.resolve();
     },
-    isSecretStored: (name) => Promise.resolve(stored.has(name)),
-    storeSecret: (name) => {
-      stored.add(name);
-      return Promise.resolve(true);
-    },
-    askSecretName: (suggested) => Promise.resolve(`${suggested}-token`),
     confirm: () => Promise.resolve(options.confirm ?? true),
     test: (name) => Promise.resolve(`tested ${name}`),
+    discover: () =>
+      Promise.resolve(options.discovery ?? { kind: 'problem', message: 'nothing', hints: [] }),
+    pickFolder: () => Promise.resolve(options.folder),
     scriptEnabled: () => false,
     open: () => undefined,
     post: (m) => posted.push(m),
@@ -33,26 +32,11 @@ function setup(initial: Record<string, unknown> = {}, options: { confirm?: boole
 const FILE = { type: 'file', path: '/tmp' };
 
 describe('SourceEditorHost', () => {
-  it('sends the user-level sources and which referenced credentials are stored', async () => {
-    const { host, posted } = setup({
-      ci: { type: 'http', auth: { bearer: '${secret:jenkins}' } },
-      nexus: { type: 'npm', auth: { token: '${secret:nexus}' } },
-      junk: 'not an object',
-    });
+  it('sends the user-level sources, skipping malformed entries', async () => {
+    const { host, posted } = setup({ a: FILE, junk: 'not an object' });
     await host.handle({ type: 'ready' });
     expect(posted).toEqual([
-      {
-        type: 'state',
-        focus: undefined,
-        state: {
-          sources: {
-            ci: { type: 'http', auth: { bearer: '${secret:jenkins}' } },
-            nexus: { type: 'npm', auth: { token: '${secret:nexus}' } },
-          },
-          storedSecrets: ['jenkins'],
-          scriptEnabled: false,
-        },
-      },
+      { type: 'state', focus: undefined, state: { sources: { a: FILE }, scriptEnabled: false } },
     ]);
   });
 
@@ -130,16 +114,33 @@ describe('SourceEditorHost', () => {
     ]);
   });
 
-  it('stores a new credential and hands its name to the field', async () => {
-    const { host, posted } = setup({});
-    await host.handle({ type: 'storeSecret', field: 'auth.token', suggestedName: 'nexus' });
-    expect(posted.at(-1)).toEqual({
-      type: 'secretStored',
-      field: 'auth.token',
-      name: 'nexus-token',
-    });
-    // Known from now on, although no saved source references it yet.
-    expect(posted[0]).toMatchObject({ type: 'state', state: { storedSecrets: ['nexus-token'] } });
+  it('passes on what a pasted link turned out to be, with a name that is free', async () => {
+    const discovery: Discovery = {
+      kind: 'found',
+      what: 'Jenkins job "ci"',
+      name: 'ci',
+      source: { type: 'http' },
+      extensions: [{ id: 'corp.ci', versions: ['1.0.0'] }],
+      notes: [],
+    };
+    const { host, posted } = setup({ ci: FILE, 'ci-2': FILE }, { discovery });
+    await host.handle({ type: 'discover', input: 'https://jenkins/job/ci/' });
+    expect(posted).toEqual([
+      {
+        type: 'discovered',
+        input: 'https://jenkins/job/ci/',
+        result: { ...discovery, name: 'ci-3' },
+      },
+    ]);
+  });
+
+  it('hands a picked folder to the page; nothing if the dialog was cancelled', async () => {
+    const picked = setup({}, { folder: '/shares/vsix' });
+    await picked.host.handle({ type: 'pickFolder' });
+    expect(picked.posted).toEqual([{ type: 'folderPicked', path: '/shares/vsix' }]);
+    const cancelled = setup({});
+    await cancelled.host.handle({ type: 'pickFolder' });
+    expect(cancelled.posted).toEqual([]);
   });
 
   it('tests the draft as given', async () => {

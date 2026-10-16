@@ -1,6 +1,6 @@
 import { assert, describe, expect, it } from 'vitest';
 
-import { parseConfig, parseSettings, referencedSecrets } from '../../src/config';
+import { parseConfig, parseSettings } from '../../src/config';
 import { settings } from './helpers';
 
 describe('parseSettings', () => {
@@ -87,13 +87,35 @@ describe('parseConfig sources', () => {
     );
   });
 
-  it('collects referenced secrets from nested values', () => {
-    expect(
-      referencedSecrets({
-        a: { headers: { Authorization: 'Basic ${secret:jenkins}' } },
-        b: { args: ['${secret:token}', '${env:X}'] },
+  it('rejects credentials and certificates: Leuchtturm handles no logins', () => {
+    const config = parseConfig(
+      settings({
+        sources: {
+          a: {
+            type: 'http',
+            index: { url: 'https://x/' },
+            auth: { bearer: 't' },
+            match: { regex: '(?<id>a)(?<version>1)' },
+            download: { url: 'https://x/' },
+          },
+          b: {
+            type: 'http',
+            index: { url: 'https://x/', headers: { 'PRIVATE-TOKEN': 't' } },
+            match: { regex: '(?<id>a)(?<version>1)' },
+            download: { url: 'https://x/' },
+          },
+          c: { type: 'npm', scope: '@corp', npmrc: '~/.npmrc' },
+          d: { type: 'file', path: '/x/${secret:token}' },
+        },
       }),
-    ).toEqual(['jenkins', 'token']);
+    );
+    const messages = Object.fromEntries(config.problems.map((p) => [p.source, p.message]));
+    expect(messages.a).toMatch(
+      /"auth" is not supported: Leuchtturm does not handle logins.*script/,
+    );
+    expect(messages.b).toMatch(/"index\.headers" is not supported/);
+    expect(messages.c).toMatch(/"npmrc" is not supported: Leuchtturm runs your npm/);
+    expect(messages.d).toMatch(/\$\{secret:token\} is not supported.*script/);
   });
 });
 

@@ -7,7 +7,7 @@ import * as vscode from 'vscode';
 import type { CheckState } from '../../../checker';
 import type { LeuchtturmApi } from '../../../extension';
 import type { Node } from '../../../ui/treeModel';
-import { IDS, JENKINS_SECRET, NPM_TOKEN } from '../../scenario';
+import { IDS, NPM_TOKEN } from '../../scenario';
 
 async function api(): Promise<LeuchtturmApi> {
   const ext = vscode.extensions.getExtension<LeuchtturmApi>('armaxri.leuchtturm-updater');
@@ -95,7 +95,8 @@ describe('Leuchtturm end to end (demo scenario, file source)', () => {
       'leuchtturm.updateAll',
       'leuchtturm.testSource',
       'leuchtturm.openSettings',
-      'leuchtturm.setSecret',
+      'leuchtturm.addSource',
+      'leuchtturm.manageSources',
     ]) {
       assert.ok(commands.includes(id), `missing command ${id}`);
     }
@@ -119,14 +120,14 @@ describe('Leuchtturm end to end (demo scenario, file source)', () => {
     assert.equal(find(state, IDS.tampered)?.status, 'not-installed');
   });
 
-  it('reads a web server listing over HTTPS with a custom CA (http source)', () => {
+  it('reads a web server listing over HTTPS, trusting the certificates the machine trusts', () => {
     const web = find(state, IDS.web);
     assert.equal(web?.status, 'not-installed');
     assert.equal(web?.latest?.sourceName, 'web');
     assert.equal(web?.latest?.sourceType, 'http');
   });
 
-  it('reads an npm registry: scope search, .npmrc token, IDs from package.json or the .vsix', () => {
+  it("runs the user's npm: registry, token and proxy come from npm's own configuration", () => {
     const registry = find(state, IDS.registry);
     assert.equal(registry?.installedVersion, '3.0.0');
     assert.equal(registry?.status, 'update');
@@ -140,15 +141,12 @@ describe('Leuchtturm end to end (demo scenario, file source)', () => {
     assert.ok(!JSON.stringify(state?.problems).includes('evil'));
   });
 
-  it('reports a missing credential and an offline source without affecting the others', () => {
+  it('reports an offline source without affecting the others', () => {
     assert.deepEqual(
       state?.problems.map((p) => p.source),
-      ['jenkins', 'script', 'offline'],
+      ['script', 'offline'],
     );
-    assert.match(problem(state, 'jenkins')?.message ?? '', /Secret "jenkins-demo" is not stored/);
     assert.match(problem(state, 'offline')?.message ?? '', /Folder not found/);
-    // The pre-installed CI demo is only offered by Jenkins, so it is not listed yet.
-    assert.equal(find(state, IDS.ci), undefined);
   });
 
   it('a check never installs anything', async () => {
@@ -162,7 +160,8 @@ describe('Leuchtturm end to end (demo scenario, file source)', () => {
     const a = await api();
     assert.deepEqual(describeTree(a.treeModel), [
       {
-        'updates (2)': [
+        'updates (3)': [
+          { [IDS.ci]: ['2.1.0', '2.0.0'] },
           { [IDS.hello]: ['1.1.0', '1.0.0'] },
           { [IDS.registry]: ['3.1.0', '3.0.0'] },
         ],
@@ -177,11 +176,11 @@ describe('Leuchtturm end to end (demo scenario, file source)', () => {
           { [IDS.impostor]: ['1.0.0'] },
         ],
       },
-      { 'problems (3)': state?.problems.map((p) => p.message) },
+      { 'problems (2)': state?.problems.map((p) => p.message) },
     ]);
-    assert.equal(a.badge, 2);
+    assert.equal(a.badge, 3);
     assert.equal(a.statusBar?.visible, true);
-    assert.equal(a.statusBar?.text, '$(broadcast) 2');
+    assert.equal(a.statusBar?.text, '$(broadcast) 3');
   });
 
   it('Test Source explains what a source found', async () => {
@@ -207,22 +206,16 @@ describe('Leuchtturm end to end (demo scenario, file source)', () => {
     assert.ok(node);
     await vscode.commands.executeCommand('leuchtturm.tree.skip', node);
     assert.equal(find(a.state, IDS.hello)?.status, 'skipped');
-    assert.equal(a.badge, 1);
-    assert.equal(a.statusBar?.text, '$(broadcast) 1');
+    assert.equal(a.badge, 2);
+    assert.equal(a.statusBar?.text, '$(broadcast) 2');
 
     await vscode.commands.executeCommand('leuchtturm.clearSkipped');
     assert.equal(find(a.state, IDS.hello)?.status, 'update');
-    assert.equal(a.badge, 2);
+    assert.equal(a.badge, 3);
   });
 
-  it('Store Credential makes the Jenkins source work (basic auth, jsonPath)', async () => {
+  it('reads a Jenkins job through its JSON API (jsonPath matcher)', async () => {
     const a = await api();
-    const ok = await vscode.commands.executeCommand<boolean>(
-      'leuchtturm.setSecret',
-      JENKINS_SECRET.name,
-      JENKINS_SECRET.value,
-    );
-    assert.equal(ok, true);
     const ci = find(a.state, IDS.ci);
     assert.equal(ci?.installedVersion, '2.0.0');
     assert.equal(ci?.status, 'update');
@@ -241,7 +234,6 @@ describe('Leuchtturm end to end (demo scenario, file source)', () => {
       report,
       /download http:\/\/jenkins\.leuchtturm\.test:\d+\/job\/demo-ci\/42\/artifact\/dist\//,
     );
-    assert.ok(!report.includes(JENKINS_SECRET.value), 'the password must not appear in the log');
   });
 
   it('Test Source explains the npm registry lookup without leaking the token', async () => {
@@ -255,7 +247,7 @@ describe('Leuchtturm end to end (demo scenario, file source)', () => {
     assert.ok(!report.includes(NPM_TOKEN), 'the npm token must not appear in the log');
   });
 
-  it('fetches release notes through the source, with its credentials', async () => {
+  it('fetches release notes through the source', async () => {
     const node = findNode((await api()).treeModel, IDS.ci);
     assert.ok(node);
     await vscode.commands.executeCommand('leuchtturm.tree.releaseNotes', node);

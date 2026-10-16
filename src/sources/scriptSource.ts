@@ -55,7 +55,6 @@ export interface ScriptHost {
   schema: JsonSchema;
   /** VS Code version, passed to scripts as LEUCHTTURM_VSCODE_VERSION. */
   hostVersion: string;
-  addSecret: (value: string) => void;
 }
 
 /** Identifies what the user approved: the executable and the script path. */
@@ -114,7 +113,7 @@ interface ListResponse {
   }[];
 }
 
-type DownloadResponse = { path: string } | { url: string; headers?: Record<string, string> };
+type DownloadResponse = { path: string } | { url: string };
 
 export class ScriptSource implements Source {
   readonly type = 'script' as const;
@@ -312,12 +311,10 @@ export class ScriptSource implements Source {
       return dest;
     }
 
-    // URL: Leuchtturm downloads it. Header values are usually credentials.
-    const headers = response.headers ?? {};
-    Object.values(headers).forEach((v) => this.host.addSecret(v));
+    // URL: Leuchtturm downloads it, without credentials. A script that needs a login for the
+    // download fetches the file itself and answers with its path.
     this.log.info(`[${this.name}] downloading ${response.url}`);
     await httpDownload(response.url, dest, {
-      headers,
       timeoutMs: Math.max(this.timeoutMs * 10, 5 * 60_000),
       token,
     });

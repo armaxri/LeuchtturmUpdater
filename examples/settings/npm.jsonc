@@ -1,30 +1,28 @@
 // Leuchtturm Updater: `npm` source examples.
+// Leuchtturm runs your npm, so registries, logins (`npm login`, `.npmrc`) and certificates
+// that work for npm work here too; none of that goes into these settings.
 // Paste into your *user* settings.json. Check each source with "Leuchtturm: Test Source…".
 {
   "leuchtturm.sources": {
-    // Every package of a scope, found via the registry's search API (Verdaccio, Artifactory,
-    // GitHub Packages, npmjs). Credentials come from ~/.npmrc, like for the npm CLI.
+    // Every package of a scope. Which registry serves the scope is npm's business, e.g.
+    // `@corp-vscode:registry=https://verdaccio.corp.example/` in ~/.npmrc.
+    "corp": {
+      "type": "npm",
+      "scope": "@corp-vscode",
+    },
+
+    // A fixed registry for this source, passed to npm as --registry.
     "verdaccio": {
       "type": "npm",
       "registry": "https://verdaccio.corp.example/",
       "scope": "@corp-vscode",
     },
 
-    // Nexus: its search API is limited, so list the packages. Token from secret storage.
+    // Nexus: its search API is limited, so list the packages.
     "nexus": {
       "type": "npm",
       "registry": "https://nexus.corp.example/repository/npm-internal/",
       "packages": ["@corp-vscode/linter", "@corp-vscode/snippets"],
-      "auth": { "token": "${secret:nexus-token}" },
-      "ca": "~/certs/corp-root-ca.pem",
-    },
-
-    // A project-specific .npmrc instead of ~/.npmrc.
-    "artifactory": {
-      "type": "npm",
-      "registry": "https://artifactory.corp.example/artifactory/api/npm/npm-vscode/",
-      "scope": "@corp-vscode",
-      "npmrc": "~/work/.npmrc",
     },
   },
 }

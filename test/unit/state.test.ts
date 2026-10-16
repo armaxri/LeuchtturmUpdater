@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { secretStorageKey, StateStore } from '../../src/state';
+import { StateStore } from '../../src/state';
 import { MemoryMemento } from './helpers';
 
 describe('StateStore', () => {
@@ -35,11 +35,5 @@ describe('StateStore', () => {
     expect(await store.acquireInstall('corp.a', 'w1', 1600, 1000)).toBe(false);
     await store.releaseInstall('corp.a', 'w2');
     expect(await store.acquireInstall('corp.a', 'w1', 1600, 1000)).toBe(true);
-  });
-});
-
-describe('secretStorageKey', () => {
-  it('namespaces secret names', () => {
-    expect(secretStorageKey('jenkins-basic')).toBe('leuchtturm.secret.jenkins-basic');
   });
 });

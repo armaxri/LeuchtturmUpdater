@@ -14,7 +14,6 @@ import { expandTemplate } from '../util/template';
 import { compareVersions, isValidVersion } from '../version';
 import type { HttpSourceConfig } from './httpConfig';
 import { extractMatches } from './httpMatcher';
-import { Requester } from './requester';
 import type { Artifact, AvailableVersion, Reporter, Source } from './types';
 
 const PREVIEW_BYTES = 2048;
@@ -24,24 +23,13 @@ const MIN_DOWNLOAD_TIMEOUT_MS = 5 * 60_000;
 export class HttpSource implements Source {
   readonly type = 'http' as const;
   readonly name: string;
-  readonly warnings: string[] = [];
-  private readonly requester: Requester;
 
   constructor(
     private readonly config: HttpSourceConfig,
-    timeoutMs: number,
+    private readonly timeoutMs: number,
     private readonly log: Logger,
   ) {
     this.name = config.name;
-    this.requester = new Requester({
-      strictSSL: config.strictSSL,
-      caPath: config.caPath,
-      timeoutMs,
-      authorization: async () => config.authorization,
-    });
-    if (!config.strictSSL) {
-      this.warnings.push('TLS certificate verification is disabled ("strictSSL": false)');
-    }
   }
 
   /** Expands a per-version template with the matched groups plus id/version. */
@@ -57,17 +45,10 @@ export class HttpSource implements Source {
   }
 
   async list(token: CancellationToken, report: Reporter = () => undefined): Promise<Artifact[]> {
-    if (!this.config.strictSSL) {
-      this.log.warn(`[${this.name}] ${this.warnings[0]}`);
-    }
-    const { url, method, headers, body } = this.config.index;
+    const { url, method, body } = this.config.index;
     const start = Date.now();
     report(`${method} ${url}`);
-    const res = await httpRequest(url, {
-      ...(await this.requester.options(token, headers)),
-      method,
-      body,
-    });
+    const res = await httpRequest(url, { timeoutMs: this.timeoutMs, token, method, body });
     const text = res.body.toString('utf8');
     const summary = `${method} ${url} → ${res.status} (${res.body.length} bytes, ${Date.now() - start} ms)`;
     this.log.debug(`[${this.name}] ${summary}`);
@@ -140,22 +121,12 @@ export class HttpSource implements Source {
   ): Promise<string> {
     const extra = { id: artifact.id, version: version.version, targetDir };
     const url = this.expand(this.config.download.url, version.ref, extra);
-    const headers = Object.fromEntries(
-      Object.entries(this.config.download.headers).map(([k, v]) => [
-        k,
-        this.expand(v, version.ref, extra),
-      ]),
-    );
     await fs.mkdir(targetDir, { recursive: true });
     // Our own file name: never trust a server-provided name for a local path.
     const dest = path.join(targetDir, `${artifact.id}-${version.version}.vsix`);
     this.log.info(`[${this.name}] downloading ${url}`);
-    const timeoutMs = Math.max(this.requester.timeoutMs * 10, MIN_DOWNLOAD_TIMEOUT_MS);
-    const res = await httpDownload(
-      url,
-      dest,
-      await this.requester.options(token, headers, { timeoutMs }),
-    );
+    const timeoutMs = Math.max(this.timeoutMs * 10, MIN_DOWNLOAD_TIMEOUT_MS);
+    const res = await httpDownload(url, dest, { timeoutMs, token });
     this.log.info(`[${this.name}] downloaded ${res.bytes} bytes from ${res.url}`);
     return dest;
   }
@@ -169,7 +140,8 @@ export class HttpSource implements Source {
       return undefined;
     }
     const res = await httpRequest(version.releaseNotesUrl, {
-      ...(await this.requester.options(token)),
+      timeoutMs: this.timeoutMs,
+      token,
       maxBytes: 1024 * 1024,
     });
     return res.body.toString('utf8');

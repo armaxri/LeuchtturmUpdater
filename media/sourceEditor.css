@@ -411,3 +411,86 @@ pre {
     flex-direction: column;
   }
 }
+
+/* "Paste a link" */
+.discover {
+  margin: 16px 0;
+}
+
+.discover > label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 1.1em;
+  font-weight: 600;
+}
+
+.discover .row {
+  flex-wrap: wrap;
+}
+
+/* The link gets the room; the buttons wrap below it in narrow editors. */
+.discover .row > input {
+  flex: 1 1 380px;
+  min-width: 0;
+}
+
+.discover .row > button {
+  flex-shrink: 0;
+}
+
+#discover-name {
+  max-width: 320px;
+}
+
+.result {
+  margin: 20px 0;
+}
+
+.result .buttons {
+  margin-top: 8px;
+}
+
+.found-title {
+  margin: 0 0 8px;
+}
+
+table.found {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 12px;
+}
+
+table.found th,
+table.found td {
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--vscode-widget-border, var(--vscode-panel-border, #8884));
+}
+
+table.found th {
+  font-weight: 600;
+  color: var(--vscode-descriptionForeground);
+}
+
+table.found code {
+  font-family: var(--vscode-editor-font-family);
+  color: var(--vscode-descriptionForeground);
+}
+
+.notes {
+  margin: 0 0 16px;
+  padding-left: 20px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.banner p,
+.banner ul {
+  flex-basis: 100%;
+  margin: 4px 0;
+}
+
+.manual {
+  margin-top: 32px;
+  color: var(--vscode-descriptionForeground);
+}

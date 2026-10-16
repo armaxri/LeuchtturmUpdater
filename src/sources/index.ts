@@ -9,10 +9,8 @@ import type { Source } from './types';
 export interface SourceDefaults {
   /** Used when a source sets no `timeout`. */
   timeoutMs: number;
-  /** Registers a credential a source found on its own (e.g. in `.npmrc`) for log redaction. */
-  addSecret: (value: string) => void;
   /** Gate, schema and host info for `script` sources. */
-  script: Omit<ScriptHost, 'addSecret'>;
+  script: ScriptHost;
 }
 
 /** Creates the implementation for a validated source config. */
@@ -24,11 +22,8 @@ export function createSource(config: SourceConfig, log: Logger, defaults: Source
     case 'http':
       return new HttpSource(config, timeoutMs, log);
     case 'npm':
-      return new NpmSource(config, timeoutMs, log, defaults.addSecret);
+      return new NpmSource(config, timeoutMs, log);
     case 'script':
-      return new ScriptSource(config, timeoutMs, log, {
-        ...defaults.script,
-        addSecret: defaults.addSecret,
-      });
+      return new ScriptSource(config, timeoutMs, log, defaults.script);
   }
 }

@@ -14,7 +14,9 @@
       "env": { "VSIX_FOLDER": "/Volumes/tools/vsix" },
     },
 
-    // examples/script/jenkins_source.py with a stored credential.
+    // examples/script/jenkins_source.py for a Jenkins that needs a login. The script signs
+    // in itself: it reads JENKINS_USER and JENKINS_TOKEN from your environment (the script
+    // gets your normal environment). Leuchtturm never sees the credentials.
     "jenkins-script": {
       "type": "script",
       "command": "python3",
@@ -22,8 +24,6 @@
       "env": {
         "JENKINS_URL": "https://jenkins.corp.example",
         "JENKINS_JOB": "corp-linter",
-        "JENKINS_USER": "ci-reader",
-        "JENKINS_TOKEN": "${secret:jenkins}",
       },
       "timeout": 60,
     },

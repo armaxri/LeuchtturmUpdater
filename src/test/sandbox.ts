@@ -28,13 +28,14 @@ import { buildScenario } from './scenario';
 const isWindows = process.platform === 'win32';
 const CODE = process.env.CODE_CLI ?? (isWindows ? 'code.cmd' : 'code');
 
-function run(args: string[], detached = false): Promise<void> {
+function run(args: string[], detached = false, env: Record<string, string> = {}): Promise<void> {
   return new Promise((resolve, reject) => {
     // `shell` only on Windows, where `.cmd` files cannot be spawned directly.
     const child = spawn(CODE, args, {
       stdio: detached ? 'ignore' : 'inherit',
       detached,
       shell: isWindows,
+      env: { ...process.env, ...env },
     });
     child.on('error', (err) =>
       reject(new Error(`Cannot run "${CODE}" (${err.message}). Set CODE_CLI to the VS Code CLI.`)),
@@ -97,6 +98,8 @@ async function main(): Promise<void> {
         : [scenario.workspace, path.join(scenario.workspace, 'TRY-ME.md')]),
     ],
     true,
+    // The demo's company CA and npm configuration (see Scenario.env).
+    scenario.env,
   );
   console.log(
     devContainer
@@ -104,9 +107,10 @@ async function main(): Promise<void> {
           'there and follow "Remote windows".'
       : 'VS Code is starting. Follow TRY-ME.md in the new window.',
   );
-  console.log(`Fake Jenkins:    ${scenario.jenkinsUrl}  (user "demo", password "demo-password")`);
+  console.log(`Fake Jenkins:    ${scenario.jenkinsUrl}/job/demo-ci/`);
+  console.log(`Jenkins with login (for "needs a login"): ${scenario.protectedJenkinsUrl}`);
   console.log(`Fake web server: ${scenario.webUrl}/vsix/`);
-  console.log(`Fake npm registry: ${scenario.npmUrl}  (token in .sandbox/npmrc)`);
+  console.log(`Fake npm registry: ${scenario.npmUrl}  (npm is configured in .sandbox/npmrc)`);
   console.log(`Fake proxy (http.proxy): ${scenario.proxyUrl}`);
   console.log('Keep this running while you try things. Press Ctrl+C to stop the servers.');
   /* eslint-enable no-console */

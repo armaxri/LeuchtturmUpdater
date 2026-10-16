@@ -31,7 +31,7 @@ export const DEFAULT_SCRIPT_ARGS: Record<ScriptAction, string[]> = {
   notes: ['get_release_notes', '--id', '${id}', '--version', '${version}'],
 };
 
-/** Variables each action's arguments may use (plus `ref.*`, env, secrets, userHome, platform). */
+/** Variables each action's arguments may use (plus `ref.*`, env, userHome, platform). */
 const ACTION_VARS: Record<ScriptAction, string[]> = {
   list: [],
   download: ['id', 'version', 'targetDir'],

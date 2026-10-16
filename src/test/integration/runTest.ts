@@ -71,6 +71,7 @@ async function main(): Promise<void> {
           '--skip-release-notes',
         ],
         extensionTestsEnv: {
+          ...scenario.env,
           LEUCHTTURM_IT_EXTENSIONS_DIR: scenario.extensionsDir,
           LEUCHTTURM_IT_PROXY: scenario.proxyUrl,
         },

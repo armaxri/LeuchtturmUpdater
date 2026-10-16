@@ -69,7 +69,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Leucht
       'utf8',
     ),
   ) as JsonSchema;
-  const controller = new Controller(context.secrets, log, target, store, installer, {
+  const controller = new Controller(log, target, store, installer, {
     schema,
     hostVersion: vscode.version,
   });
@@ -174,9 +174,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<Leucht
     command('leuchtturm.clearSkipped', () => controller.clearSkipped()),
     command('leuchtturm.showLog', () => channel.show()),
     command('leuchtturm.testSource', (name?: string) => controller.testSource(name)),
-    command('leuchtturm.setSecret', (name?: string, value?: string) =>
-      controller.setSecret(name, value),
-    ),
     command('leuchtturm.approveScript', (name?: string, confirmed?: boolean) =>
       controller.approveScript(name, confirmed === true),
     ),

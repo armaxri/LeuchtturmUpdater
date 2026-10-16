@@ -14,19 +14,14 @@ import {
   type SourceEntry,
   type SourceResult,
 } from './checker';
-import {
-  parseConfig,
-  parseSettings,
-  referencedSecrets,
-  type Config,
-  type SourceConfig,
-} from './config';
+import { parseConfig, parseSettings, type Config, type SourceConfig } from './config';
 import type { Installer } from './installer';
 import { errorMessage, type RedactingLogger } from './log';
 import { createSource } from './sources';
 import { ScriptSource, type ScriptGate } from './sources/scriptSource';
+import type { Artifact } from './sources/types';
 import type { JsonSchema } from './util/jsonSchema';
-import { secretStorageKey, type CachedCheck, type StateStore } from './state';
+import type { CachedCheck, StateStore } from './state';
 import type { Target } from './targets/types';
 import { notifyUpdates, promptReload } from './ui/notifications';
 import { CancelledError, NEVER_CANCELLED, withTimeout } from './util/cancellation';
@@ -69,7 +64,6 @@ export class Controller implements vscode.Disposable {
   private readonly approvalPrompts = new Set<string>();
 
   constructor(
-    private readonly secrets: vscode.SecretStorage,
     private readonly log: RedactingLogger,
     private readonly target: Target,
     private readonly store: StateStore,
@@ -114,7 +108,7 @@ export class Controller implements vscode.Disposable {
   }
 
   /**
-   * Reads settings and secrets and recreates the sources. Returns the config and the names of
+   * Reads the settings and recreates the sources. Returns the config and the names of
    * sources that were added or changed since the previous load.
    */
   async reloadConfig(): Promise<{ config: Config; changedSources: string[] }> {
@@ -126,11 +120,10 @@ export class Controller implements vscode.Disposable {
     return { config, changedSources };
   }
 
-  /** Reads settings and secrets and recreates the sources. */
+  /** Reads the settings and recreates the sources. */
   async loadConfig(): Promise<Config> {
     const get = readRawSettings();
-    const secrets = await this.resolveSecrets(get('sources'));
-    const config = parseConfig(get, { secrets });
+    const config = parseConfig(get);
     for (const p of config.problems) {
       this.log.warn(p.message);
     }
@@ -151,31 +144,14 @@ export class Controller implements vscode.Disposable {
     return config;
   }
 
-  /** Reads the secrets that `${secret:NAME}` references in `rawSources` point to. */
-  private async resolveSecrets(rawSources: unknown): Promise<Record<string, string>> {
-    const secrets: Record<string, string> = {};
-    for (const name of referencedSecrets(rawSources)) {
-      const value = await this.secrets.get(secretStorageKey(name));
-      if (value !== undefined) {
-        this.log.redactor.add(value);
-        secrets[name] = value;
-      }
-    }
-    return secrets;
-  }
-
   private createEntry(c: SourceConfig, config: Config): SourceEntry {
     const defaultTimeoutMs =
       (c.type === 'script'
         ? config.settings.scriptTimeoutSeconds
         : config.settings.httpTimeoutSeconds) * 1000;
-    if (c.type === 'http' || c.type === 'npm') {
-      c.sensitiveValues.forEach((v) => this.log.redactor.add(v));
-    }
     return {
       source: createSource(c, this.log, {
         timeoutMs: defaultTimeoutMs,
-        addSecret: (v) => this.log.redactor.add(v),
         script: { gate: this.scriptGate, ...this.scriptInfo },
       }),
       timeoutMs: c.timeoutSeconds ? c.timeoutSeconds * 1000 : defaultTimeoutMs,
@@ -197,7 +173,7 @@ export class Controller implements vscode.Disposable {
   }
 
   private async runCheck({ manual, sources }: CheckOptions): Promise<CheckState | undefined> {
-    // Re-read the config every time: cheap, and picks up edited settings and new secrets.
+    // Re-read the config every time: cheap, and picks up edited settings.
     const config = await this.loadConfig();
     if (!config.settings.enabled) {
       this.log.info('Leuchtturm is disabled (leuchtturm.enabled = false); skipping check');
@@ -623,63 +599,6 @@ export class Controller implements vscode.Disposable {
   }
 
   /**
-   * Stores a credential for `${secret:NAME}` in VS Code's SecretStorage (encrypted by the OS
-   * keychain). Arguments skip the prompts (tests). An empty value deletes the secret.
-   */
-  async setSecret(name?: string, value?: string): Promise<boolean> {
-    if (!name) {
-      const referenced = referencedSecrets(readRawSettings()('sources'));
-      const items = await Promise.all(
-        referenced.map(async (n) => ({
-          label: n,
-          description: (await this.secrets.get(secretStorageKey(n))) ? 'stored' : 'not stored',
-        })),
-      );
-      const OTHER = 'Another name…';
-      const picked = await vscode.window.showQuickPick(
-        [...items, { label: OTHER, description: '' }],
-        {
-          title: 'Leuchtturm: Store Credential',
-          placeHolder: 'Which ${secret:NAME} do you want to set?',
-        },
-      );
-      name =
-        picked?.label === OTHER
-          ? await vscode.window.showInputBox({
-              title: 'Leuchtturm: Store Credential',
-              prompt: 'Name used as ${secret:NAME} in leuchtturm.sources',
-              validateInput: (v) =>
-                /^[\w.-]+$/.test(v) ? undefined : 'Letters, digits, _ . - only',
-            })
-          : picked?.label;
-      if (!name) {
-        return false;
-      }
-    }
-    if (value === undefined) {
-      value = await vscode.window.showInputBox({
-        title: `Leuchtturm: Store Credential "${name}"`,
-        prompt: "Stored encrypted in VS Code's secret storage. Leave empty to delete it.",
-        password: true,
-        ignoreFocusOut: true,
-      });
-      if (value === undefined) {
-        return false;
-      }
-    }
-    if (value === '') {
-      await this.secrets.delete(secretStorageKey(name));
-      this.log.info(`Deleted secret "${name}"`);
-    } else {
-      this.log.redactor.add(value);
-      await this.secrets.store(secretStorageKey(name), value);
-      this.log.info(`Stored secret "${name}"`);
-    }
-    await this.check({ manual: false });
-    return true;
-  }
-
-  /**
    * Runs one source and prints everything it saw to the log: matched and skipped files,
    * filters, resulting artifacts and download references. Returns the report text.
    */
@@ -712,13 +631,12 @@ export class Controller implements vscode.Disposable {
 
   /**
    * Tests a source as it is being edited (not saved yet), for the source editor. Uses the
-   * current settings otherwise, and the stored credentials.
+   * current settings otherwise.
    */
   async testDraft(name: string, raw: unknown): Promise<string> {
     const get = readRawSettings();
     const draft = { [name]: raw };
-    const secrets = await this.resolveSecrets(draft);
-    const config = parseConfig((key) => (key === 'sources' ? draft : get(key)), { secrets });
+    const config = parseConfig((key) => (key === 'sources' ? draft : get(key)));
     const parsed = config.sources[0];
     const text = await this.runTest(
       name,
@@ -730,6 +648,27 @@ export class Controller implements vscode.Disposable {
     );
     this.log.info(text);
     return this.log.redactor.redact(text);
+  }
+
+  /**
+   * Lists a source that is not saved, with the real implementation, for the guided setup.
+   * Throws the configuration problem or listing error that a check would show.
+   */
+  async listDraft(name: string, raw: unknown): Promise<Artifact[]> {
+    const get = readRawSettings();
+    const config = parseConfig((key) => (key === 'sources' ? { [name]: raw } : get(key)));
+    const parsed = config.sources[0];
+    if (!parsed) {
+      throw new Error(config.problems[0]?.message ?? 'The source is disabled.');
+    }
+    const entry = this.createEntry(parsed, config);
+    this.log.debug(`Guided setup: listing ${JSON.stringify(raw)}`);
+    return withTimeout(
+      entry.timeoutMs,
+      NEVER_CANCELLED,
+      (t) => entry.source.list(t),
+      `Source "${name}"`,
+    );
   }
 
   /** Lists one source and describes everything it found (Test Source). */

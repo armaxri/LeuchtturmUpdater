@@ -39,24 +39,29 @@ connections and runs no programs.
 ## Verification before installing
 
 - `sha256` from a `.sha256` sidecar or a script response is checked; a mismatch aborts.
-- npm downloads are checked against the registry's `dist.integrity` (or `dist.shasum`).
+- npm downloads are checked by npm itself against the registry's integrity hash.
 - Downgrades need a modal confirmation.
 - Every install logs its source and URL.
 - Every `.vsix` is opened before installing: `extension/package.json` must name the offered
   extension and version, otherwise nothing is installed. A different publisher with the same
   name needs a modal confirmation.
 
-## Credentials
+## No credentials, no certificate settings
 
-- Store passwords and tokens with **Leuchtturm: Store Credential…**. They live in VS Code's
-  secret storage, encrypted by the operating system's keychain, and settings refer to them as
-  `${secret:NAME}`.
-- All log output passes through a redactor: stored secrets, derived values (such as the
-  base64 of basic auth), `Authorization` headers, npm tokens and passwords in URLs are masked.
-- Credentials are not sent to another host after a redirect, and npm credentials are only sent
-  to the registry's own host.
-- `strictSSL: false` is possible for broken servers, but shows a warning in the log and the
-  tooltip; prefer `ca` with your company's root certificate.
+Leuchtturm handles no logins at all, which keeps a whole class of risks out of it:
+
+- There are no password, token or header settings and no secret storage. `http` sources only
+  reach servers that need no login; Leuchtturm sends no credentials, and a source that tries
+  to configure some is rejected with a pointer to script sources.
+- Servers that need a login are reached through a `script` source. The script (from your
+  company, reviewed and approved by you) signs in however your company does it; Leuchtturm
+  never sees the login.
+- `npm` sources run your own npm, which uses its own configuration (`npm login`, `.npmrc`).
+  Leuchtturm does not read `.npmrc`; npm checks the integrity of what it downloads.
+- Certificate checks cannot be turned off. HTTPS uses the certificates VS Code trusts,
+  including those installed on the computer.
+- Log output masks `Authorization` headers and passwords in URLs anyway, in case a script or a
+  server prints them.
 
 ## VS Code and Marketplace terms
 

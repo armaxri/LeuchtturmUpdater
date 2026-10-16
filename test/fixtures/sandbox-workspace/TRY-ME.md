@@ -13,9 +13,9 @@ inside the repository and is rebuilt on every `npm run sandbox`.
 | Leuchtturm Demo Tampered | 1.0.0 with a wrong `.sha256`                                         | no        | Installing fails with "SHA-256 mismatch".                        |
 | Leuchtturm Demo Evil     | only in an "evil" source in this workspace's `.vscode/settings.json` | no        | Must never appear, because sources come from user settings only. |
 
-| Leuchtturm Demo CI | fake **Jenkins** (`jenkins` source, needs a password): 2.0.0, 2.1.0 | 2.0.0 | Appears once the credential is stored. Update to 2.1.0. |
-| Leuchtturm Demo Web | fake **web server listing** over HTTPS (`web` source, custom CA): 0.3.0 | no | Can be installed. |
-| Leuchtturm Demo Registry | fake **npm registry** (`npm` source, token from `.sandbox/npmrc`): 3.0.0, 3.1.0 | 3.0.0 | Update to 3.1.0. |
+| Leuchtturm Demo CI | fake **Jenkins** (`jenkins` source): 2.0.0, 2.1.0 | 2.0.0 | Update to 2.1.0. |
+| Leuchtturm Demo Web | fake **web server listing** over HTTPS (`web` source; its certificate is trusted like a company CA installed on the computer): 0.3.0 | no | Can be installed. |
+| Leuchtturm Demo Registry | fake **npm registry** that needs a token (`npm` source; npm is configured in `.sandbox/npmrc`, like your own `npm login`): 3.0.0, 3.1.0 | 3.0.0 | Update to 3.1.0. |
 | Leuchtturm Demo Packed | fake **npm registry**, package without `vscodeExtension`: 0.9.0 | no | ID read from the `.vsix` inside. Can be installed. |
 | Leuchtturm Demo Scripted | **script source** running `examples/script/folder_source.py` (needs Python ≥ 3.8): 1.0.0, 1.1.0 | no | Appears after you enable scripts and approve the program. |
 
@@ -25,8 +25,13 @@ not exist, so a problem shows up.
 All network traffic goes through a local fake company proxy (`http.proxy` in the user
 settings), and the servers use `*.leuchtturm.test` names that only that proxy can resolve.
 
-The fake Jenkins, web server, npm registry and proxy run inside the `npm run sandbox` process. Keep it running;
-Ctrl+C stops them (the `jenkins`, `web` and `npm` sources then show up as problems).
+A second fake Jenkins **needs a login**; it is not a source. Its address is printed by
+`npm run sandbox` ("Jenkins with login"). Pasting it into _Add Source_ shows what happens with
+servers that need a login: Leuchtturm handles no credentials and points to script sources.
+
+The fake Jenkins servers, web server, npm registry and proxy run inside the `npm run sandbox`
+process. Keep it running; Ctrl+C stops them (the `jenkins`, `web` and `npm` sources then show
+up as problems).
 
 The demo extensions show their version in the status bar (bottom right, `$(beaker) hello 1.0.0`).
 
@@ -36,15 +41,12 @@ Steps marked 🤖 are also covered by the integration tests; the others need eye
 a modal dialog.
 
 1. Open the **Leuchtturm** view in the activity bar (lighthouse icon). You should see
-   _Updates available (2)_, _Available, not installed (4)_ and _Problems (3)_, a badge `2` on
-   the icon and `$(broadcast) 2` on the left of the status bar. 🤖 One problem says
-   _Secret "jenkins-demo" is not stored_, another _Script sources are disabled_ (even though
-   this workspace's `.vscode/settings.json` sets `leuchtturm.script.enabled` to `true`: only
-   your user settings count). 🤖
-2. Run **Leuchtturm: Store Credential…** (also in the view's `…` menu), pick `jenkins-demo`
-   and enter `demo-password`. _Leuchtturm Demo CI 2.0.0 → 2.1.0_ appears under updates and
-   the badge shows `3`. 🤖 Click the book icon on it: the release notes are fetched from
-   Jenkins with your credential. 🤖
+   _Updates available (3)_, _Available, not installed (6)_ and _Problems (2)_, a badge `3` on
+   the icon and `$(broadcast) 3` on the left of the status bar. 🤖 One problem says
+   _Script sources are disabled_ (even though this workspace's `.vscode/settings.json` sets
+   `leuchtturm.script.enabled` to `true`: only your user settings count). 🤖
+2. Click the book icon on _Leuchtturm Demo CI 2.0.0 → 2.1.0_: the release notes are fetched
+   from Jenkins. 🤖
 3. Hover _Leuchtturm Demo Hello_: the tooltip shows the installed and latest version, the
    source, the last check time and the release notes. Click the book icon to open the notes.
 4. About 10 seconds after startup a notification says _Leuchtturm Demo Hello 1.1.0 is
@@ -61,8 +63,9 @@ a modal dialog.
    different extension. 🤖 _leuchtturm-impostor.hello_ contains the right extension from
    another publisher: you are asked to confirm in a modal dialog.
 9. Click the download icon on _Leuchtturm Demo Web_: it is downloaded over HTTPS from a
-   server with a self-signed certificate, trusted through the `ca` setting. 🤖 Then install
-   _Leuchtturm Demo Packed_: the tarball's integrity is checked and the `.vsix` extracted. 🤖
+   server whose certificate is trusted the way a company CA would be (installed on the
+   computer, no Leuchtturm setting). 🤖 Then install _Leuchtturm Demo Packed_: your npm
+   downloads it (with the token from npm's own configuration) and the `.vsix` is extracted. 🤖
 10. Run **Leuchtturm: Test Source…** (also in the view's `…` menu) and pick `share`: the log
     lists every matched and skipped file with the reason, and the resulting versions. Try
     `jenkins` (HTTP status, start of the JSON body, every match and its download URL), `npm`
@@ -83,15 +86,18 @@ a modal dialog.
     then install it. 🤖 Run **Test Source…** → `script` to see the exact command line, the
     script's stderr and its JSON output. 🤖 Untick the setting again: the source turns back
     into a problem without running. 🤖
-15. Sources in a form: click **+** in the Leuchtturm view (_Add Source…_). Pick _File share or
-    folder_, call it `team`, enter any folder and click **Test**: the result shows below the
-    form. 🤖 **Save**: `team` appears in your user settings.json and in the list. 🤖 Open
-    `jenkins`: every field is filled in, and a warning says the credential is not stored yet. 🤖
-    Click **Store new…** next to the password, keep the name `jenkins-demo`, enter
-    `demo-password`: the warning disappears. Empty the download URL: Save is disabled and the
-    error names the field; **Revert** restores it. 🤖 The pencil on the `offline` problem opens
-    that source. 🤖 **Delete** `team` (confirm the dialog). 🤖 The Settings page (gear icon) lists
-    _Sources_ first, with a link to this form. 🤖
+15. Add a source from a link: click **+** in the Leuchtturm view (_Add Source…_). Paste the
+    _Fake Jenkins_ address printed by `npm run sandbox` followed by
+    `/job/demo-ci/lastSuccessfulBuild/artifact/` (the "Last Successful Artifacts" page) and
+    press Enter: _Found 1 extension in Jenkins job "demo-ci"_ with 2.1.0 and 2.0.0. 🤖 **Save**:
+    `demo-ci` appears in your user settings.json, complete with the JSON API and download
+    URL. 🤖 Now paste the _Jenkins with login_ address: Leuchtturm says it needs a login and
+    offers a script source instead. 🤖 Paste the share folder (or use **Choose Folder…**): the
+    demo extensions show up, suggested name `share-2`. 🤖
+    Open `jenkins` in the list: the detailed form shows every field. Empty the download URL:
+    Save is disabled and the error names the field; **Revert** restores it. 🤖 The pencil on
+    the `offline` problem opens that source. 🤖 **Delete** `demo-ci` (confirm the dialog). 🤖
+    The Settings page (gear icon) lists _Sources_ first, with a link to the form. 🤖
 16. Stop `npm run sandbox` with Ctrl+C and run **Leuchtturm: Check for Updates**: the
     `jenkins`, `web` and `npm` sources show up as problems, the share keeps working.
 

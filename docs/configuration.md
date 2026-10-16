@@ -5,13 +5,14 @@ are read from your **user** settings only; values in a workspace's `.vscode/sett
 ignored, so a cloned repository cannot add download locations.
 
 VS Code's Settings page cannot show input fields for nested objects such as
-`leuchtturm.sources`. Use **Leuchtturm: Manage Sources** instead (also the **+** button in the
-Leuchtturm view, _Edit Source_ on a problem or extension in the view, and the link on the
-Settings page). It shows a form for each source type, checks the fields with the same rules as
-the checks themselves, warns about missing or plain-text credentials, stores new credentials in
-the secret storage, and runs _Test Source_ on the unsaved form. Fields the form does not know
-are kept as they are. Saving rewrites the `leuchtturm.sources` entry in your settings.json, so
-comments inside that entry are lost.
+`leuchtturm.sources`. Use **Leuchtturm: Add Source…** instead (also the **+** button in the
+Leuchtturm view and the link on the Settings page): paste the link where you download the
+extension (a Jenkins job, a web page with `.vsix` links, a folder, an npm package name), check
+what Leuchtturm found, and save. **Leuchtturm: Manage Sources** and _Edit Source_ on a problem
+or extension in the view open a detailed form for each source, which checks the fields with the
+same rules as the checks themselves and runs _Test Source_ on the unsaved form. Fields the form
+does not know are kept as they are. Saving rewrites the `leuchtturm.sources` entry in your
+settings.json, so comments inside that entry are lost.
 
 ## Settings
 
@@ -62,7 +63,6 @@ Strings in source settings may contain variables:
 | Variable                   | Meaning                                                                 |
 | -------------------------- | ----------------------------------------------------------------------- |
 | `${env:NAME}`              | Environment variable.                                                   |
-| `${secret:NAME}`           | Credential stored with **Leuchtturm: Store Credential…**.               |
 | `${userHome}`, leading `~` | Home directory.                                                         |
 | `${platform}`              | VS Code target platform, e.g. `win32-x64`, `darwin-arm64`, `linux-x64`. |
 | `${id}`, `${version}`      | The artifact being downloaded (download URLs, release notes URLs).      |
@@ -71,20 +71,24 @@ Strings in source settings may contain variables:
 An unknown or unset variable is a configuration error shown under _Problems_. It is never
 replaced with an empty string.
 
-## Secrets
+## Logins and certificates
 
-Run **Leuchtturm: Store Credential…**. It lists every `${secret:NAME}` your sources use and
-whether a value is stored. The value is kept in VS Code's secret storage (encrypted by the
-operating system's keychain), not in `settings.json`. Entering an empty value deletes it.
+Leuchtturm handles no credentials: no passwords, tokens or login headers in its settings, and
+no secret storage. `http` sources are for servers that need no login; for one that does, use a
+[`script` source](sources/script.md), which signs in itself. `npm` sources run your own npm, so
+logins set up for npm (`npm login`, `.npmrc`) are used by npm, not by Leuchtturm.
 
-Stored secrets, `Authorization` headers, npm tokens and passwords in URLs are masked in all
-log output.
+There are no certificate settings either. HTTPS uses the certificates VS Code trusts, which
+include those installed on your computer, so an internal company CA installed by your IT works.
+
+Log output still masks `Authorization` headers and passwords in URLs, in case a script or
+server prints them.
 
 ## Proxies
 
 Leuchtturm has no proxy settings of its own. VS Code routes the network requests of
-extensions through its proxy support, so `http`, `npm` and `script` URL downloads follow the
-same rules as the rest of VS Code:
+extensions through its proxy support, so `http` sources and `script` URL downloads follow the
+same rules as the rest of VS Code (`npm` sources use npm's own `proxy` settings):
 
 - `http.proxy`, or else the system proxy configuration (including PAC files),
 - `http.noProxy` for hosts that must be reached directly,

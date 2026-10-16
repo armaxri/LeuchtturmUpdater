@@ -17,7 +17,7 @@ the milestones in §12 of the spec in order, and keep each milestone shippable (
 - `script` sources run only if `leuchtturm.script.enabled` is `true` in **user** settings. Read only `inspect().globalValue` (SPEC §6.5).
 - The `leuchtturm.sources` setting is `"scope": "application"`. Never read sources from workspace settings (security, SPEC §9). Not `machine`: in remote windows VS Code reads machine-scoped settings from the remote side, so Leuchtturm would see no sources.
 - Script sources run through `spawn` with `shell: false` and per-argument templating. No shell strings.
-- Redact secrets (`${secret:…}`, auth headers) in every log line.
+- **No credential handling.** No passwords, tokens, auth headers, secret storage or certificate options in Leuchtturm. Servers that need a login are reached through `script` sources (the script signs in itself); `npm` sources run the user's own npm with its own configuration. Still redact `Authorization` headers and URL passwords in log lines, in case scripts or servers print them.
 - Name core types generically (`Artifact`, `Source`) so non-VS-Code targets can be added later.
 - Every source type ships with documentation in `docs/sources/` and runnable examples in `examples/`. Python examples use the standard library only (Python ≥ 3.8).
 - Write tests alongside features. Use local fixtures (temp dirs, a local HTTP server, fake scripts) and never real company servers.

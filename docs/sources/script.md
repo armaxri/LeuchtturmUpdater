@@ -4,6 +4,11 @@ When no built-in source fits, write a script. Leuchtturm runs it with fixed argu
 one JSON document from its stdout. Python is the natural choice (the examples use only the
 standard library), but any executable works.
 
+**Servers that need a login are reached this way.** Leuchtturm itself handles no credentials:
+your script signs in however your company does it (environment variables, a keyring, a token
+file, single sign-on tooling), lists the extensions and downloads them. Leuchtturm never sees
+the login.
+
 ```jsonc
 // User settings (settings.json)
 "leuchtturm.script.enabled": true,
@@ -38,7 +43,7 @@ Script sources run programs on your machine, so two things must happen first:
 | `command`                       | (required)                        | Executable: a name on the `PATH` (`python3`) or a path (`~/venv/bin/python`). Started **without a shell**. On Windows, use an `.exe` (`py`, `python`, `node`), not a `.cmd`/`.bat` file. |
 | `script`                        |                                   | Script file, passed as the first argument. Supports `~`.                                                                                                                                 |
 | `cwd`                           |                                   | Working directory.                                                                                                                                                                       |
-| `env`                           | `{}`                              | Extra environment variables. Values support `${env:NAME}` and `${secret:NAME}`.                                                                                                          |
+| `env`                           | `{}`                              | Extra environment variables. Values support `${env:NAME}`. The script also gets your normal environment.                                                                                 |
 | `args`                          | see below                         | Argument lists per action.                                                                                                                                                               |
 | `timeout`                       | `leuchtturm.script.timeout` (120) | Seconds per run. The process tree is killed after that.                                                                                                                                  |
 | `include`, `exclude`, `enabled` |                                   | As for every source.                                                                                                                                                                     |
@@ -56,7 +61,7 @@ Default `args`:
 Every argument is templated on its own and passed as one argument, so a value can never
 turn into extra arguments or shell syntax. Available variables: `${id}`, `${version}` and
 `${targetDir}` (download), `${id}` and `${version}` (notes), `${ref.<key>}`, `${env:NAME}`,
-`${secret:NAME}`, `${userHome}`, `${platform}`. Set `"notes": null` if your script has no
+`${userHome}`, `${platform}`. Set `"notes": null` if your script has no
 release notes.
 
 ## Protocol (version 1)
@@ -131,15 +136,11 @@ Either a path:
 Write the file into the target directory. A path elsewhere is copied there first, so your
 file is never deleted; a relative path is resolved against the target directory.
 
-Or a URL that Leuchtturm downloads, with optional headers (their values are masked in the
-log):
+Or a URL that Leuchtturm downloads. It sends no credentials, so this is only for files that
+need no login; otherwise download the file yourself and answer with its path.
 
 ```json
-{
-  "protocol": 1,
-  "url": "https://files.corp.example/corp.linter-1.4.1.vsix",
-  "headers": { "Authorization": "…" }
-}
+{ "protocol": 1, "url": "https://files.corp.example/corp.linter-1.4.1.vsix" }
 ```
 
 ### `notes` (`get_release_notes`), optional

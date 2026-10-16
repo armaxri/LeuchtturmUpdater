@@ -91,7 +91,8 @@ When a check finds **new** updates (not already announced, not skipped) and `leu
 | `leuchtturm.updateAll` | Leuchtturm: Update All |
 | `leuchtturm.update` | Leuchtturm: Update Extension… (quick pick) |
 | `leuchtturm.installVersion` | Leuchtturm: Install Specific Version… |
-| `leuchtturm.setSecret` | Leuchtturm: Store Credential… (SecretStorage) |
+| `leuchtturm.addSource` | Leuchtturm: Add Source… (paste a link; see §6.6) |
+| `leuchtturm.manageSources` | Leuchtturm: Manage Sources (form editor for `leuchtturm.sources`) |
 | `leuchtturm.clearSkipped` | Leuchtturm: Reset Skipped Versions |
 | `leuchtturm.showLog` | Leuchtturm: Show Log |
 | `leuchtturm.testSource` | Leuchtturm: Test Source… (runs one source and prints raw results and matches; essential for regex and script debugging) |
@@ -124,7 +125,7 @@ src/
     statusBar.ts
     notifications.ts
   util/
-    http.ts               fetch wrapper: headers, auth, timeout, proxy, TLS options
+    http.ts               request helper: redirects, timeout, cancellation, size limit
     vsix.ts               read extension/package.json from a .vsix (zip) for verification
     template.ts           ${var} substitution
 ```
@@ -256,17 +257,15 @@ Behaviour matches Garmin's Private Extension Manager, so teams can migrate easil
 ```jsonc
 "nexus": {
   "type": "npm",
-  "registry": "https://nexus.corp.example/repository/npm-internal/",
-  "scope": "@corp-vscode",             // optional: list via search API / restrict to scope
+  "scope": "@corp-vscode",             // optional: list via `npm search` / restrict to scope
   "packages": ["@corp-vscode/linter"], // optional explicit list (search APIs differ between registries)
-  "auth": { "token": "${secret:nexus-token}" }   // or read from ~/.npmrc
+  "registry": "https://nexus.corp.example/repository/npm-internal/"  // optional; default: npm's config
 }
 ```
 
-- Use the registry HTTP API directly (`GET <registry>/<package>` → packument), with no npm CLI dependency.
+- Run the user's own npm CLI (`npm view`, `npm search`, `npm pack`; `spawn` without a shell, on Windows via `node.exe npm-cli.js`). Registries, logins, proxies and certificates come from the user's npm configuration; Leuchtturm reads no `.npmrc` and handles no tokens (changed after 1.0 testing: no credential handling in Leuchtturm).
 - Package convention: the npm package contains exactly one `.vsix` file at its root. `package.json` has a `"vscodeExtension": "corp.linter"` field, or Leuchtturm derives the ID from the `.vsix` inside.
-- `download()` fetches the tarball (`dist.tarball`), checks `dist.integrity`, extracts the `.vsix`.
-- Read `~/.npmrc` for `//host/:_authToken=` if `auth` is not given.
+- `download()` runs `npm pack <package>@<version>` (npm checks the integrity) and extracts the `.vsix`.
 - Write **`docs/sources/npm.md`** covering how to package (`vsce package`), the minimal `package.json`, `npm publish --registry`, and how CI should do it. Add `examples/npm/package.json` and `examples/npm/publish.sh`.
 
 ### 6.4 `http`: two-step request (Jenkins and others)
@@ -278,9 +277,7 @@ Step 1 is the **index request**, step 2 the **matcher**, step 3 the **download r
   "type": "http",
   "index": {
     "url": "https://jenkins.corp.example/job/corp-linter/api/json?tree=builds[number,result,artifacts[fileName,relativePath]]{0,20}",
-    "method": "GET",
-    "headers": { "Authorization": "Basic ${secret:jenkins-basic}" },
-    "strictSSL": true
+    "method": "GET"
   },
   "match": {
     // applied to the response body; global, all matches collected
@@ -293,8 +290,7 @@ Step 1 is the **index request**, step 2 the **matcher**, step 3 the **download r
   },
   "download": {
     // all named groups + ${id} + ${version} are available
-    "url": "https://jenkins.corp.example/job/corp-linter/lastSuccessfulBuild/artifact/${path}",
-    "headers": { "Authorization": "Basic ${secret:jenkins-basic}" }
+    "url": "https://jenkins.corp.example/job/corp-linter/lastSuccessfulBuild/artifact/${path}"
   },
   "releaseNotes": { "url": "https://jenkins.corp.example/job/corp-linter/lastSuccessfulBuild/artifact/CHANGELOG.md" }
 }
@@ -302,8 +298,7 @@ Step 1 is the **index request**, step 2 the **matcher**, step 3 the **download r
 
 - Required named groups: `version`, and `id` unless `match.id` is set. Every other named group is stored in `ref` and can be used in templates.
 - Deduplicate by `(id, version)`. The first match wins, so an index sorted newest-first does the right thing.
-- Auth options: header templates, `"auth": { "basic": { "user": "...", "password": "${secret:...}" } }`, `"auth": { "bearer": "${env:TOKEN}" }`.
-- For servers that only allow a weak TLS setup, support `"strictSSL": false` with a visible warning in the log and the tree tooltip. Also support `"ca": "/path/to/corp-ca.pem"`.
+- **No login support** (changed after 1.0 testing): no `auth`, no custom headers, no `ca`/`strictSSL`. Leuchtturm handles no credentials; servers that need a login are reached through a `script` source, which signs in itself. Setting these fields is a configuration problem that points to script sources; a 401/403 response says the same. HTTPS uses the certificates VS Code trusts (including the system's).
 - **`leuchtturm.testSource`** is the main UX for this type. It prints the status, the first 2 KB of the body, every match with its groups, and the resolved download URLs.
 - Docs: `docs/sources/http.md`, with full examples for Jenkins (JSON API, plus the "directory listing" HTML variant), a plain Apache or nginx autoindex, an Artifactory folder listing, and a GitLab or Gitea generic packages API.
 
@@ -399,11 +394,29 @@ Validate every response against a JSON schema (`schemas/script-protocol.schema.j
 - `examples/script/README.md`: how to try each one on the command line (`python3 minimal_static.py get_versions | python3 -m json.tool`), plus the matching settings snippet.
 - Docs: `docs/sources/script.md`, the full protocol reference, generated from or kept in sync with the schema.
 
+### 6.6 Adding a source from a link (added after 1.0 testing)
+
+Users rarely know regex or JSONPath. **Leuchtturm: Add Source…** asks for what they have: the
+link where they download the extension (a Jenkins job, its "Last Successful Artifacts", one
+artifact, a web page with `.vsix` links), a folder or share, or an npm package name or scope.
+
+- Leuchtturm recognises the input (Jenkins by `/job/` in the URL; folders by path syntax; npm
+  names by package-name syntax; any other URL as a web page), proposes a configuration, and
+  lists it with the real source implementation, so the preview equals what a check finds.
+- Jenkins: the job's JSON API over the last 20 builds (successful ones only), so older versions
+  stay installable. Web pages: a regex over the `.vsix` links, generated from the file names.
+- File names like `publisher.name-1.2.3.vsix` need nothing else. `name-1.2.3.vsix` gets a fixed
+  ID read from inside one `.vsix`. Names without a version are explained (rename in the build).
+- A 401/403 or a login redirect explains that Leuchtturm handles no logins and offers a script
+  source.
+- The detailed form (per-type fields, validation with the real parser, Test on the unsaved
+  form) stays available for adjusting and for existing sources.
+
 ---
 
-## 7. Variables and secrets
+## 7. Variables
 
-Template substitution works in URLs, headers, args, env and paths:
+Template substitution works in URLs, args, env and paths:
 
 | Variable | Meaning |
 |---|---|
@@ -411,11 +424,10 @@ Template substitution works in URLs, headers, args, env and paths:
 | `${<group>}` | Named regex group (http source) |
 | `${ref.<key>}` | Script `ref` value |
 | `${env:NAME}` | Environment variable |
-| `${secret:NAME}` | Value from VS Code `SecretStorage`, set with `leuchtturm.setSecret` |
 | `${userHome}`, `~` | Home directory |
 | `${platform}` | e.g. `win32-x64`, for platform-specific VSIX |
 
-An unknown variable is a configuration error and must not be replaced with an empty string. Secret values are **redacted** in all logs.
+An unknown variable is a configuration error and must not be replaced with an empty string. `${secret:NAME}` existed until 1.0 testing and is now an error that points to script sources. Logs still redact `Authorization` headers and URL passwords.
 
 ---
 
@@ -445,7 +457,7 @@ An unknown variable is a configuration error and must not be replaced with an em
 ## 11. Documentation deliverables
 - `README.md`: what it is, a 2-minute quick start (file share), a screenshot of the tree, links to the per-source docs.
 - `docs/sources/file.md`, `npm.md`, `http.md`, `script.md`.
-- `docs/configuration.md`: every setting, variables, secrets.
+- `docs/configuration.md`: every setting, variables, logins and certificates (none in Leuchtturm).
 - `docs/security.md`: why sources are application-scoped, verification steps, and how this relates to the VS Code / Marketplace terms (official VS Code, own extensions, documented API, marketplace config untouched).
 - `examples/` as listed in §6.3 and §6.5, plus `examples/settings/*.jsonc` with one complete snippet per source type.
 - `CHANGELOG.md`.
@@ -453,8 +465,8 @@ An unknown variable is a configuration error and must not be replaced with an em
 ## 12. Milestones (implement in this order, each one shippable)
 1. **M1 Skeleton**: scaffold, esbuild, lint, tests, CI; `version.ts`, `template.ts`, config loading; `file` source; check, notification and install; output channel.
 2. **M2 Visibility**: tree view, status bar, scheduler with cross-window lock, skip version, Update all, Test Source.
-3. **M3 HTTP**: `http` source with regex matcher, auth, secrets, TLS options; Jenkins docs and examples.
-4. **M4 npm**: `npm` source, `.npmrc` auth, tarball extraction; publishing guide and examples.
+3. **M3 HTTP**: `http` source with regex matcher; Jenkins docs and examples. (Auth, secrets and TLS options were part of M3 and removed after 1.0 testing.)
+4. **M4 npm**: `npm` source, tarball extraction; publishing guide and examples. (Later switched to running the user's npm CLI instead of reading `.npmrc`.)
 5. **M5 Script**: `script` source with the user-level opt-in gate, JSON schema, Python examples and helper, protocol docs.
 6. **M6 Polish**: VSIX verification, proxy support, README screenshots, `CHANGELOG`, v1.0.0.
 7. **M7 (post-1.0) Directories**: the `directory` target kind from §13.

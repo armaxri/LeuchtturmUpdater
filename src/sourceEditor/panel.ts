@@ -11,13 +11,11 @@ import { randomBytes } from 'node:crypto';
 import * as vscode from 'vscode';
 
 import type { Controller } from '../controller';
-import { secretStorageKey } from '../state';
 import { SECTION } from '../vscodeSettings';
+import { discover } from './discover';
 import { DOCS_URL } from './formSpec';
 import { SourceEditorHost } from './host';
 import type { EditorFocus, FromWebview, ToWebview } from './protocol';
-
-const SECRET_NAME = /^[\w.-]+$/;
 
 export class SourceEditorPanel {
   private static current: SourceEditorPanel | undefined;
@@ -76,21 +74,21 @@ export class SourceEditorPanel {
       writeSources: async (sources) => {
         await config().update('sources', sources, vscode.ConfigurationTarget.Global);
       },
-      isSecretStored: async (name) =>
-        (await context.secrets.get(secretStorageKey(name))) !== undefined,
-      storeSecret: (name) => controller.setSecret(name),
-      askSecretName: (suggested) =>
-        Promise.resolve(
-          vscode.window.showInputBox({
-            title: 'Leuchtturm: Store Credential',
-            prompt: 'Name of the credential. The form refers to it as ${secret:NAME}.',
-            value: suggested,
-            validateInput: (v) => (SECRET_NAME.test(v) ? undefined : 'Letters, digits, _ . - only'),
-          }),
-        ),
       confirm: async (message, action) =>
         (await vscode.window.showWarningMessage(message, { modal: true }, action)) === action,
       test: (name, source) => controller.testDraft(name, source),
+      discover: (input) =>
+        discover(input, { list: (name, source) => controller.listDraft(name, source) }),
+      pickFolder: async () =>
+        (
+          await vscode.window.showOpenDialog({
+            canSelectFolders: true,
+            canSelectFiles: false,
+            canSelectMany: false,
+            openLabel: 'Use This Folder',
+            title: 'Folder or share with .vsix files',
+          })
+        )?.[0]?.fsPath,
       scriptEnabled: () => config().inspect<boolean>('script.enabled')?.globalValue === true,
       open: (what) => {
         if (what === 'scriptSetting') {
@@ -115,7 +113,9 @@ export class SourceEditorPanel {
         const focus = message.type === 'ready' ? this.pendingFocus : undefined;
         this.pendingFocus = undefined;
         const work =
-          message.type === 'ready' ? this.host.refresh(focus) : this.host.handle(message);
+          message.type === 'ready'
+            ? Promise.resolve(this.host.refresh(focus))
+            : this.host.handle(message);
         work.catch((err: unknown) =>
           this.panel.webview.postMessage({
             type: 'error',
