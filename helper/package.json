@@ -1,0 +1,26 @@
+{
+  "name": "leuchtturm-remote-helper",
+  "displayName": "Leuchtturm Remote Helper",
+  "description": "Lets Leuchtturm Updater see the extensions installed on the remote side of Dev Containers, SSH and WSL windows. Installed by Leuchtturm on request.",
+  "version": "0.0.0",
+  "publisher": "armaxri",
+  "license": "MIT",
+  "icon": "icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/armaxri/LeuchtturmUpdater.git"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "activationEvents": [
+    "onCommand:leuchtturm.remoteHelper.installedExtensions"
+  ],
+  "main": "./extension.js"
+}

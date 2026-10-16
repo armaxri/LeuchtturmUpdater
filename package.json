@@ -78,6 +78,11 @@
         "category": "Leuchtturm"
       },
       {
+        "command": "leuchtturm.installRemoteHelper",
+        "title": "Install Helper in Remote",
+        "category": "Leuchtturm"
+      },
+      {
         "command": "leuchtturm.showLog",
         "title": "Show Log",
         "category": "Leuchtturm",
@@ -152,7 +157,7 @@
         "leuchtturm.sources": {
           "type": "object",
           "default": {},
-          "scope": "machine",
+          "scope": "application",
           "markdownDescription": "Named update sources. Read from **user settings only**; workspace settings are ignored for security. See the [file source docs](https://github.com/armaxri/LeuchtturmUpdater/blob/main/docs/sources/file.md).",
           "additionalProperties": {
             "type": "object",
@@ -484,7 +489,7 @@
         "leuchtturm.script.enabled": {
           "type": "boolean",
           "default": false,
-          "scope": "machine",
+          "scope": "application",
           "markdownDescription": "Allow `script` sources to run programs. Only the value in your **user settings** counts; workspace settings cannot turn this on. Each script also needs a one-time approval."
         }
       }
@@ -612,6 +617,10 @@
       ],
       "commandPalette": [
         {
+          "command": "leuchtturm.installRemoteHelper",
+          "when": "remoteName"
+        },
+        {
           "command": "leuchtturm.tree.update",
           "when": "false"
         },
@@ -643,7 +652,8 @@
     "test:integration": "node out/test/integration/runTest.js",
     "package": "vsce package",
     "sandbox": "npm run build && tsc -p . && node out/test/sandbox.js",
-    "screenshots": "npm run build && tsc -p . && node out/test/screenshots.js"
+    "screenshots": "npm run build && tsc -p . && node out/test/screenshots.js",
+    "test:remote": "npm run build && tsc -p . && node out/test/remote/runRemoteTest.js"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

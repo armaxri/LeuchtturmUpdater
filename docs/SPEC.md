@@ -177,8 +177,10 @@ interface Source {
 ## 5. Settings
 
 All settings that can define something executable or credential-bearing (`leuchtturm.sources`)
-use `"scope": "machine"`. That stops a cloned repository's `.vscode/settings.json` from injecting a
-malicious script or download URL. Behavioural settings use `"scope": "application"` or the default.
+use `"scope": "application"`. That stops a cloned repository's `.vscode/settings.json` from injecting a
+malicious script or download URL. (`machine` would do that too, but in a remote window VS Code reads
+machine-scoped settings from the remote side's settings, so Leuchtturm, which runs locally, would
+see no sources; found by the Dev Containers test.) Behavioural settings use the default scope.
 
 | Setting | Type | Default | Description |
 |---|---|---|---|
@@ -193,7 +195,7 @@ malicious script or download URL. Behavioural settings use `"scope": "applicatio
 | `leuchtturm.trackAllFromSources` | boolean | `false` | If `true`, every artifact any source offers appears in the tree under "Available, not installed". |
 | `leuchtturm.http.timeout` | number (s) | `30` | Default request timeout. |
 | `leuchtturm.script.timeout` | number (s) | `120` | Default script timeout. |
-| `leuchtturm.script.enabled` | boolean | `false` | **Opt-in gate for `script` sources.** `"scope": "machine"`, and only the **user-level** value counts (§6.5). |
+| `leuchtturm.script.enabled` | boolean | `false` | **Opt-in gate for `script` sources.** `"scope": "application"`, and only the **user-level** value counts (§6.5). |
 
 Respect VS Code's `http.proxy`, `http.proxyStrictSSL` and `http.proxyAuthorization` where
 possible. Node's `fetch` does not pick them up automatically, so use `undici`'s `ProxyAgent` or
@@ -319,7 +321,7 @@ building their own extension.
 "leuchtturm.script.enabled": true
 ```
 
-- Read the value with `workspace.getConfiguration('leuchtturm').inspect('script.enabled')` and use **only `globalValue`**. Ignore `workspaceValue` and `workspaceFolderValue` even if they are present. This is defence in depth on top of `"scope": "machine"`.
+- Read the value with `workspace.getConfiguration('leuchtturm').inspect('script.enabled')` and use **only `globalValue`**. Ignore `workspaceValue` and `workspaceFolderValue` even if they are present. This is defence in depth on top of `"scope": "application"`.
 - If the gate is off, never spawn a script source. Show it in the tree under "Problems" as *"Script sources are disabled — enable `leuchtturm.script.enabled` in your user settings"*, with an action that opens the user settings at that key.
 - The gate is checked again right before every spawn, not only at load time, so turning it off takes effect immediately.
 - Optionally (nice to have) show a one-time confirmation when a script source runs for the first time or its `command`/`script` path changes: "Leuchtturm will run `python3 ~/tools/leuchtturm_source.py`. Allow?". Store the approval per command+path hash in `globalState`.
@@ -425,7 +427,7 @@ An unknown variable is a configuration error and must not be replaced with an em
 
 ## 9. Safety and verification
 1. **No automatic installs.** Every install starts from a user action (§1, §3.3).
-2. The `leuchtturm.sources` setting is `machine`-scoped (§5). Never read any source from workspace settings.
+2. The `leuchtturm.sources` setting is `application`-scoped (§5). Never read any source from workspace settings.
 3. `script` sources need the user-level opt-in `leuchtturm.script.enabled` (§6.5). Without it, scripts are ignored.
 4. Before installing, open the `.vsix` (zip) and read `extension/package.json`. `publisher.name` must equal the expected ID and `version` must equal the expected version. Otherwise abort with a clear error. This is cheap: one zip entry read with `yauzl`/`fflate`, about 30 lines.
 5. If a `sha256` or npm `integrity` is known, verify it.
@@ -444,7 +446,7 @@ An unknown variable is a configuration error and must not be replaced with an em
 - `README.md`: what it is, a 2-minute quick start (file share), a screenshot of the tree, links to the per-source docs.
 - `docs/sources/file.md`, `npm.md`, `http.md`, `script.md`.
 - `docs/configuration.md`: every setting, variables, secrets.
-- `docs/security.md`: why sources are machine-scoped, verification steps, and how this relates to the VS Code / Marketplace terms (official VS Code, own extensions, documented API, marketplace config untouched).
+- `docs/security.md`: why sources are application-scoped, verification steps, and how this relates to the VS Code / Marketplace terms (official VS Code, own extensions, documented API, marketplace config untouched).
 - `examples/` as listed in §6.3 and §6.5, plus `examples/settings/*.jsonc` with one complete snippet per source type.
 - `CHANGELOG.md`.
 
@@ -475,7 +477,7 @@ Goal: keep a **plain directory** up to date with the same sources, UI and notify
 ]
 ```
 
-Like `leuchtturm.sources`, `leuchtturm.targets` is `"scope": "machine"`, because it decides where files are written.
+Like `leuchtturm.sources`, `leuchtturm.targets` is `"scope": "application"`, because it decides where files are written.
 
 ### 13.2 How a source delivers a directory
 - `file` source: a sub-folder `<id>-<version>/`, or an archive `<id>-<version>.zip` / `.tar.gz`.

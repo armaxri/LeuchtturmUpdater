@@ -68,13 +68,20 @@ Safeguards and the relation to the VS Code / Marketplace terms: [`docs/security.
 ## Remote development
 
 Leuchtturm runs on the **local** machine (`extensionKind: ["ui"]`), where file shares and
-internal servers are usually reachable. With Remote-SSH, WSL or Dev Containers, checks and
-downloads still happen locally, and the install goes through VS Code's own install command,
-which places an extension according to that extension's `extensionKind`.
+internal servers are usually reachable. In Dev Containers, Remote-SSH and WSL windows:
 
-Not yet verified in practice: whether extensions installed **only on the remote side** are
-recognised as installed (VS Code may report them only to the remote extension host). If you
-use remote setups, please report what you see.
+- Your local user settings apply: the same sources, credentials and script approvals as in
+  local windows. Nothing needs to be configured inside the container.
+- Checks and downloads run locally. Installs go through VS Code's own install command, which
+  puts each extension where it runs: most extensions on the remote side, UI extensions locally.
+- VS Code only tells Leuchtturm about the extensions installed **locally**. For the ones on the
+  remote side, Leuchtturm needs a small helper there. The sidebar shows _Extensions installed in
+  the dev container are not visible yet_; click it once to install the helper (it ships with
+  Leuchtturm; **Leuchtturm: Install Helper in Remote** does the same). A rebuilt container
+  needs it again. Without the helper, remote-side extensions show up as _Not installed_.
+
+This is tested automatically in a real Dev Containers window (`npm run test:remote`, needs
+Docker). Remote-SSH and WSL use the same mechanism but are not tested automatically.
 
 ## Development
 
@@ -83,8 +90,10 @@ npm install
 npm run build             # bundle into dist/extension.js
 npm test                  # unit tests (vitest)
 npm run test:integration  # end-to-end in a downloaded VS Code
+npm run test:remote       # the same demo in a Dev Containers window (needs Docker)
 npm run lint              # eslint + prettier + tsc
 npm run sandbox           # open a demo VS Code window (isolated profile, demo share)
+npm run sandbox -- --dev-container  # the same, inside a dev container (needs Docker)
 npm run screenshots       # re-render docs/images/*.png from the demo scenario
 npx vsce package          # build the .vsix
 ```

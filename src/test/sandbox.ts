@@ -4,7 +4,9 @@
  * serve the fake Jenkins and web server until you press Ctrl+C.
  *
  * Flags:
- *   --no-launch   prepare everything but do not open VS Code (used to validate the setup)
+ *   --no-launch       prepare everything but do not open VS Code (used to validate the setup)
+ *   --dev-container   open the workspace in a Dev Containers window (needs Docker); the
+ *                     container is removed when you stop the sandbox
  *
  * Environment:
  *   CODE_CLI      VS Code CLI to use (default: `code`, or `code.cmd` on Windows)
@@ -13,6 +15,13 @@
 import { spawn } from 'node:child_process';
 import * as path from 'node:path';
 
+import {
+  DEV_CONTAINER_SETTINGS,
+  DEV_CONTAINERS_EXTENSION,
+  pinDockerEngine,
+  prepareDevContainer,
+  removeDevContainers,
+} from './devContainer';
 import { ROOT } from './packageFixture';
 import { buildScenario } from './scenario';
 
@@ -43,7 +52,14 @@ function run(args: string[], detached = false): Promise<void> {
 
 async function main(): Promise<void> {
   const launch = !process.argv.includes('--no-launch');
-  const scenario = await buildScenario(path.join(ROOT, '.sandbox'));
+  const devContainer = process.argv.includes('--dev-container');
+  if (devContainer) {
+    pinDockerEngine();
+  }
+  const scenario = await buildScenario(
+    path.join(ROOT, '.sandbox'),
+    devContainer ? DEV_CONTAINER_SETTINGS : {},
+  );
   const profile = [
     '--user-data-dir',
     scenario.userDataDir,
@@ -51,8 +67,13 @@ async function main(): Promise<void> {
     scenario.extensionsDir,
   ];
 
-  for (const vsix of scenario.preinstall) {
+  // In a container window, extensions start out uninstalled on the container side.
+  for (const vsix of devContainer ? [] : scenario.preinstall) {
     await run([...profile, '--install-extension', vsix, '--force']);
+  }
+  const folderUri = devContainer ? await prepareDevContainer(scenario.workspace) : undefined;
+  if (devContainer) {
+    await run([...profile, '--install-extension', DEV_CONTAINERS_EXTENSION]);
   }
 
   /* eslint-disable no-console */
@@ -71,12 +92,18 @@ async function main(): Promise<void> {
       `--extensionDevelopmentPath=${ROOT}`,
       '--log',
       'armaxri.leuchtturm-updater:debug',
-      scenario.workspace,
-      path.join(scenario.workspace, 'TRY-ME.md'),
+      ...(folderUri
+        ? [`--folder-uri=${folderUri}`]
+        : [scenario.workspace, path.join(scenario.workspace, 'TRY-ME.md')]),
     ],
     true,
   );
-  console.log('VS Code is starting. Follow TRY-ME.md in the new window.');
+  console.log(
+    devContainer
+      ? 'VS Code is starting the dev container (the first time takes a minute). Open TRY-ME.md ' +
+          'there and follow "Remote windows".'
+      : 'VS Code is starting. Follow TRY-ME.md in the new window.',
+  );
   console.log(`Fake Jenkins:    ${scenario.jenkinsUrl}  (user "demo", password "demo-password")`);
   console.log(`Fake web server: ${scenario.webUrl}/vsix/`);
   console.log(`Fake npm registry: ${scenario.npmUrl}  (token in .sandbox/npmrc)`);
@@ -85,6 +112,10 @@ async function main(): Promise<void> {
   /* eslint-enable no-console */
   await new Promise<void>((resolve) => process.once('SIGINT', resolve));
   await scenario.close();
+  if (devContainer) {
+    console.log('Removing the dev container…'); // eslint-disable-line no-console
+    removeDevContainers(scenario.workspace);
+  }
 }
 
 main().catch((err: unknown) => {

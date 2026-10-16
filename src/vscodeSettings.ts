@@ -12,8 +12,10 @@ export const SECTION = 'leuchtturm';
 /**
  * Settings that can make Leuchtturm download or execute something. They are read from the
  * user (global) level only, never from workspace or folder settings, so a cloned repository's
- * `.vscode/settings.json` cannot inject a source or turn on scripts. `"scope": "machine"` in
- * package.json already makes VS Code ignore workspace values; this is defence in depth.
+ * `.vscode/settings.json` cannot inject a source or turn on scripts. `"scope": "application"` in
+ * package.json already makes VS Code ignore workspace, folder and remote values; this is
+ * defence in depth. (Not `machine`: in a remote window VS Code reads machine-scoped settings
+ * from the remote side, so Leuchtturm would see no sources at all.)
  */
 const USER_ONLY = new Set(['sources', 'script.enabled']);
 

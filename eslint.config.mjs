@@ -10,6 +10,7 @@ export default tseslint.config(
       'node_modules/**',
       'examples/**',
       '.sandbox/**',
+      '.remote-test/**',
       'test/fixtures/**/*.js',
     ],
   },

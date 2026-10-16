@@ -85,3 +85,19 @@ a modal dialog.
     into a problem without running. 🤖
 15. Stop `npm run sandbox` with Ctrl+C and run **Leuchtturm: Check for Updates**: the
     `jenkins`, `web` and `npm` sources show up as problems, the share keeps working.
+
+## Remote windows
+
+Start the sandbox with `npm run sandbox -- --dev-container` (needs Docker). The workspace opens
+inside a container (the first start takes a minute); the container is removed when you stop the
+sandbox. Leuchtturm keeps running on your machine and uses your local user settings.
+
+1. Open the Leuchtturm view: the same sources as in a local window are listed. 🤖 Under
+   _Problems_: _Extensions installed in the dev container are not visible yet_. 🤖
+2. Install _Leuchtturm Demo Hello_ 1.0.0 with **Install Specific Version…**. It lands in the
+   container (the Extensions view lists it under _Dev Container_). 🤖
+3. Click the problem node: the helper is installed in the container and the problem disappears.
+   🤖 _Leuchtturm Demo Hello_ now shows its update to 1.1.0. 🤖
+4. Install _Leuchtturm Demo World_ through the Extensions view (`…` → _Install from VSIX…_, pick
+   it from the share): Leuchtturm shows it as up to date after the next check. 🤖
+5. Update _Leuchtturm Demo Hello_: 1.1.0 is installed in the container. 🤖

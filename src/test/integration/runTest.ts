@@ -21,6 +21,9 @@ import { ROOT } from '../packageFixture';
 import { buildScenario } from '../scenario';
 
 async function main(): Promise<void> {
+  // Pessimistic until proven otherwise: if cleanup ever hangs on a promise that never settles,
+  // Node exits once nothing is left to do, and that must not look like a passing run.
+  process.exitCode = 1;
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'leuchtturm-it-'));
   try {
     const scenario = await buildScenario(path.join(tmp, 's'), {
@@ -77,6 +80,7 @@ async function main(): Promise<void> {
   } finally {
     await fs.rm(tmp, { recursive: true, force: true });
   }
+  process.exitCode = 0;
 }
 
 main().catch((err: unknown) => {

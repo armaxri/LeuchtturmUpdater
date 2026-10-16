@@ -10,10 +10,20 @@ setting for automatic installs, and notifications never install from their butto
 
 ## Sources come from your user settings only
 
-`leuchtturm.sources` (and `leuchtturm.script.enabled`) have `"scope": "machine"`, so VS Code
-ignores them in workspace settings. Leuchtturm additionally reads only the user-level value
-(`inspect().globalValue`). A cloned repository's `.vscode/settings.json` can therefore not add
-a download location or turn on scripts.
+`leuchtturm.sources` (and `leuchtturm.script.enabled`) have `"scope": "application"`, so VS
+Code ignores them in workspace and folder settings, and in the Remote settings of a container or
+SSH host. Leuchtturm additionally reads only the user-level value (`inspect().globalValue`). A
+cloned repository's `.vscode/settings.json` or a dev container's configuration can therefore not
+add a download location or turn on scripts.
+
+## Remote windows
+
+Leuchtturm runs on your local machine, also in Dev Containers, Remote-SSH and WSL windows. To see
+the extensions installed on the remote side, it needs its helper there (see the
+[README](../README.md#remote-development)). The helper ships inside Leuchtturm's own package, is
+only installed when you click _Install Helper_, and does one thing: it answers Leuchtturm with
+the IDs and versions of the extensions installed next to it. It has no settings, opens no network
+connections and runs no programs.
 
 ## Script sources
 

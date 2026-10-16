@@ -324,6 +324,8 @@ export async function startFakeProxy(options: { authorization?: string } = {}): 
     }
     seen.push(`CONNECT ${req.url}`);
     const [host, port] = (req.url ?? '').split(':');
+    tunnels.add(client);
+    client.on('close', () => tunnels.delete(client));
     const upstream = net.connect(Number(port), resolveHost(host ?? ''), () => {
       client.write('HTTP/1.1 200 Connection Established\r\n\r\n');
       upstream.write(head);
@@ -332,7 +334,11 @@ export async function startFakeProxy(options: { authorization?: string } = {}): 
     });
     upstream.on('error', () => client.destroy());
     client.on('error', () => upstream.destroy());
+    client.on('close', () => upstream.destroy());
   });
+  // Tunnelled sockets are no longer tracked by the HTTP server, so closeAllConnections()
+  // misses them and close() would wait for them forever.
+  const tunnels = new Set<net.Socket>();
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const { port } = server.address() as AddressInfo;
   return {
@@ -341,6 +347,7 @@ export async function startFakeProxy(options: { authorization?: string } = {}): 
     close: () =>
       new Promise<void>((resolve) => {
         server.closeAllConnections();
+        tunnels.forEach((socket) => socket.destroy());
         server.close(() => resolve());
       }),
   };

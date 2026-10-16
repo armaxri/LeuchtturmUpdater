@@ -11,6 +11,12 @@ Milestone M6: polish.
   `http.noProxy`, proxy login). Verified by the integration tests, which send all traffic
   through a local proxy.
 - README screenshots, rendered automatically from the demo scenario (`npm run screenshots`).
+- Remote windows (Dev Containers, Remote-SSH, WSL): `leuchtturm.sources` and
+  `leuchtturm.script.enabled` now have `"scope": "application"`. With `machine`, VS Code read
+  them from the remote side, so Leuchtturm saw no sources in remote windows.
+- Remote windows: a small helper extension, shipped inside Leuchtturm and installed on click,
+  reports the extensions installed on the remote side, which VS Code does not show to local
+  extensions. Tested in a real Dev Containers window (`npm run test:remote`).
 
 ## 0.5.0
 

@@ -10,6 +10,7 @@ import * as vscode from 'vscode';
 
 import type { CheckState } from './checker';
 import { Controller } from './controller';
+import { HELPER_VSIX } from './helper/protocol';
 import { Installer } from './installer';
 import { errorMessage, RedactingLogger } from './log';
 import { canLead, Scheduler } from './scheduler';
@@ -43,7 +44,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<Leucht
   const channel = vscode.window.createOutputChannel('Leuchtturm Updater', { log: true });
   const log = new RedactingLogger(channel, new Redactor());
   const windowId = vscode.env.sessionId;
-  const target = new VsCodeExtensionTarget();
+  const target = new VsCodeExtensionTarget({
+    vsixPath: path.join(context.extensionPath, 'dist', HELPER_VSIX),
+    version: String(context.extension.packageJSON.version),
+  });
   const store = new StateStore(context.globalState);
   const installer = new Installer(
     path.join(context.globalStorageUri.fsPath, 'downloads'),
@@ -175,6 +179,26 @@ export async function activate(context: vscode.ExtensionContext): Promise<Leucht
     command('leuchtturm.approveScript', (name?: string, confirmed?: boolean) =>
       controller.approveScript(name, confirmed === true),
     ),
+    command('leuchtturm.installRemoteHelper', async () => {
+      if (!vscode.env.remoteName) {
+        void vscode.window.showInformationMessage(
+          'Leuchtturm: the helper is only needed in remote windows (Dev Containers, SSH, WSL).',
+        );
+        return;
+      }
+      log.info(`Installing the remote helper (${vscode.env.remoteName})`);
+      const ok = await target.installHelper();
+      controller.recompute();
+      if (ok) {
+        log.info('Remote helper is ready');
+      } else {
+        log.warn('Remote helper was installed but does not answer yet');
+        void vscode.window.showWarningMessage(
+          'Leuchtturm: the helper was installed but does not answer yet. Reload the window if ' +
+            'extensions on the remote side stay invisible.',
+        );
+      }
+    }),
     command('leuchtturm.openSettings', () =>
       vscode.commands.executeCommand(
         'workbench.action.openSettings',
@@ -231,6 +255,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<Leucht
   controller.adoptCache();
   refreshUi();
   scheduler.start();
+  if (vscode.env.remoteName) {
+    // Versions on the remote side come from the helper; fetch them without waiting for a check.
+    void target.refresh().then(() => controller.currentConfig && controller.recompute());
+  }
 
   return {
     checkNow: () => controller.check({ manual: false }),

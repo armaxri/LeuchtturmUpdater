@@ -15,7 +15,7 @@ the milestones in §12 of the spec in order, and keep each milestone shippable (
 - TypeScript strict, bundled with esbuild into `dist/extension.js`. Keep runtime dependencies minimal (see SPEC §10). Ask before adding others.
 - **Never install automatically.** Checks only notify the user and update the sidebar. Installs start from a user action only, with no setting to change that.
 - `script` sources run only if `leuchtturm.script.enabled` is `true` in **user** settings. Read only `inspect().globalValue` (SPEC §6.5).
-- The `leuchtturm.sources` setting is `"scope": "machine"`. Never read sources from workspace settings (security, SPEC §9).
+- The `leuchtturm.sources` setting is `"scope": "application"`. Never read sources from workspace settings (security, SPEC §9). Not `machine`: in remote windows VS Code reads machine-scoped settings from the remote side, so Leuchtturm would see no sources.
 - Script sources run through `spawn` with `shell: false` and per-argument templating. No shell strings.
 - Redact secrets (`${secret:…}`, auth headers) in every log line.
 - Name core types generically (`Artifact`, `Source`) so non-VS-Code targets can be added later.
@@ -28,7 +28,8 @@ the milestones in §12 of the spec in order, and keep each milestone shippable (
 - `npm test`: unit tests
 - `npm run test:integration`: `@vscode/test-electron`
 - `npm run lint`
-- `npm run sandbox`: open a demo VS Code window (isolated profile, demo share); `-- --no-launch` only prepares it
+- `npm run test:remote`: the demo scenario in a real Dev Containers window (needs Docker)
+- `npm run sandbox`: open a demo VS Code window (isolated profile, demo share); `-- --no-launch` only prepares it, `-- --dev-container` opens it inside a dev container
 - `npx vsce package`: produce the `.vsix`
 
 ## User-friendly testing (sandbox + scenario)
@@ -44,6 +45,9 @@ reachable through `npm run sandbox` without any extra steps.
 - Only steps that automation cannot drive (modal dialogs, visual checks) are left for the
   sandbox alone. Say so in TRY-ME.md.
 - Before calling a milestone done, run `npm run sandbox -- --no-launch` to check that the setup builds.
+- Remote windows are covered the same way: `src/test/devContainer.ts` opens the scenario in a
+  Dev Containers window for both `npm run test:remote` and `npm run sandbox -- --dev-container`.
+  Run `npm run test:remote` after changes to settings, installing or extension lookups.
 
 ## Assets
 - `media/icon.svg` / `media/icon.png` (256 px): Marketplace and extension icon

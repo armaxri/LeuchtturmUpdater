@@ -203,7 +203,11 @@ export class Controller implements vscode.Disposable {
       (e) => !sources || sources.includes(e.source.name),
     );
     this.log.info(`Checking ${entries.length} source(s)…`);
-    const fresh = await listAll(entries, NEVER_CANCELLED, this.log);
+    const [fresh] = await Promise.all([
+      listAll(entries, NEVER_CANCELLED, this.log),
+      // In a remote window: ask the remote helper what is installed there.
+      this.target.refresh?.(),
+    ]);
     await this.storeResults(fresh, sources === undefined);
     const state = this.recompute();
 
@@ -285,7 +289,7 @@ export class Controller implements vscode.Disposable {
       installedVersion: (id) => this.target.getInstalledVersion(id),
       displayName: (id) => this.target.getDisplayName?.(id),
       isSkipped: (id, version) => this.store.isSkipped(id, version),
-      configProblems: config.problems,
+      configProblems: [...config.problems, ...(this.target.problems?.() ?? [])],
       now: this.store.cache?.checkedAt,
     });
     this.current = state;
