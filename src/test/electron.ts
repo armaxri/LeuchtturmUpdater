@@ -4,8 +4,6 @@
  * the screen, and it is always closed again.
  */
 
-import { spawnSync } from 'node:child_process';
-
 import {
   downloadAndUnzipVSCode,
   resolveCliPathFromVSCodeExecutablePath,
@@ -17,6 +15,7 @@ import {
   type Page,
 } from 'playwright-core';
 
+import { runCodeSync } from './codeCli';
 import { ROOT } from './paths';
 import type { Scenario } from './scenario';
 
@@ -41,9 +40,7 @@ export async function launchWorkbench(
   // (passing both made VS Code warn "Option user-data-dir is defined more than once").
   const cli = resolveCliPathFromVSCodeExecutablePath(executablePath);
   for (const vsix of scenario.preinstall) {
-    spawnSync(cli, [...profile, '--install-extension', vsix], {
-      shell: process.platform === 'win32',
-    });
+    runCodeSync(cli, [...profile, '--install-extension', vsix]);
   }
   const app = await electron.launch({
     executablePath,

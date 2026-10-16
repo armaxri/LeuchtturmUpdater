@@ -6,7 +6,6 @@
  * 3. Opens the scenario workspace and runs the mocha suite inside VS Code.
  */
 
-import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -19,6 +18,7 @@ import {
 
 import { ROOT } from '../packageFixture';
 import { removeTempDir } from '../paths';
+import { runCodeSync } from '../codeCli';
 import { buildScenario } from '../scenario';
 
 async function main(): Promise<void> {
@@ -50,11 +50,7 @@ async function main(): Promise<void> {
     // (passing both made VS Code warn "Option user-data-dir is defined more than once").
     const cli = resolveCliPathFromVSCodeExecutablePath(vscodeExecutablePath);
     for (const vsix of scenario.preinstall) {
-      const r = spawnSync(cli, [...profile, '--install-extension', vsix], {
-        encoding: 'utf8',
-        // The Windows CLI is a .cmd file, which needs a shell.
-        shell: process.platform === 'win32',
-      });
+      const r = runCodeSync(cli, [...profile, '--install-extension', vsix]);
       if (r.status !== 0) {
         throw new Error(`Pre-installing ${vsix} failed:\n${r.stdout}\n${r.stderr}`);
       }

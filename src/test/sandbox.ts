@@ -14,7 +14,6 @@
  *   CODE_CLI      VS Code CLI to use (default: `code`, or `code.cmd` on Windows)
  */
 
-import { spawn } from 'node:child_process';
 import * as path from 'node:path';
 
 import {
@@ -24,6 +23,7 @@ import {
   prepareDevContainer,
   removeDevContainers,
 } from './devContainer';
+import { spawnCode } from './codeCli';
 import { JENKINS_EXTENSION_ID, startJenkins, type DockerJenkins } from './dockerJenkins';
 import { ROOT } from './packageFixture';
 import { buildScenario, demo } from './scenario';
@@ -33,11 +33,9 @@ const CODE = process.env.CODE_CLI ?? (isWindows ? 'code.cmd' : 'code');
 
 function run(args: string[], detached = false, env: Record<string, string> = {}): Promise<void> {
   return new Promise((resolve, reject) => {
-    // `shell` only on Windows, where `.cmd` files cannot be spawned directly.
-    const child = spawn(CODE, args, {
+    const child = spawnCode(CODE, args, {
       stdio: detached ? 'ignore' : 'inherit',
       detached,
-      shell: isWindows,
       env: { ...process.env, ...env },
     });
     child.on('error', (err) =>

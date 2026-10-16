@@ -12,7 +12,6 @@
  */
 
 import * as assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -28,6 +27,7 @@ import { verifyVsix } from '../../util/vsix';
 import { JENKINS_EXTENSION_ID, startJenkins } from '../dockerJenkins';
 import { draftSource, listDraft } from '../listDraft';
 import { removeTempDir } from '../paths';
+import { runCodeSync } from '../codeCli';
 
 const step = (text: string) => console.log(`- ${text}`); // eslint-disable-line no-console
 
@@ -80,10 +80,7 @@ async function main(): Promise<void> {
       '--extensions-dir',
       path.join(tmp, 'e'),
     ];
-    const r = spawnSync(cli, [...profile, '--install-extension', file], {
-      encoding: 'utf8',
-      shell: process.platform === 'win32',
-    });
+    const r = runCodeSync(cli, [...profile, '--install-extension', file]);
     assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
     assert.ok(
       (await fs.readdir(path.join(tmp, 'e'))).some((d) =>

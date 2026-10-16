@@ -4,9 +4,11 @@
  * into the scenario's own extensions folder (your VS Code is not touched).
  */
 
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+
+import { spawnCode } from './codeCli';
 
 export const DEV_CONTAINERS_EXTENSION = 'ms-vscode-remote.remote-containers';
 /** Small image with what the VS Code server needs (glibc, tar). */
@@ -115,8 +117,7 @@ export function removeDevContainers(workspace: string): void {
  */
 export function runCodeCli(cli: string, args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
-    // `shell` only on Windows, where the CLI is a .cmd file.
-    const child = spawn(cli, args, { stdio: 'inherit', shell: process.platform === 'win32' });
+    const child = spawnCode(cli, args, { stdio: 'inherit' });
     child.on('error', (err) =>
       reject(new Error(`Cannot run "${cli}" (${err.message}). Set CODE_CLI to the VS Code CLI.`)),
     );
