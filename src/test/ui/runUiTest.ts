@@ -12,7 +12,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { activeWebview, launchWorkbench, runCommand } from '../electron';
-import { removeTempDir } from '../paths';
+import { removeTempDir, ROOT } from '../paths';
 import { buildScenario } from '../scenario';
 
 const step = (text: string) => console.log(`- ${text}`); // eslint-disable-line no-console
@@ -143,11 +143,20 @@ async function main(): Promise<void> {
       const problem = page
         .locator('.part.sidebar .monaco-list-row', { hasText: 'offline' })
         .first();
-      await problem.waitFor();
       // The inline pencil button (context menus are native on macOS, out of Playwright's reach).
-      await problem.hover();
-      await problem.locator('.action-label[aria-label="Edit Source"]').click();
-      await form.locator('h1', { hasText: 'offline' }).waitFor();
+      // The check started above redraws the tree when it finishes, which can swallow a click
+      // that lands on a row being replaced; so hover, click and look for the form until it opens.
+      await eventually(
+        'the form for "offline"',
+        async () => {
+          await problem.hover({ timeout: 2_000 });
+          await problem
+            .locator('.action-label[aria-label="Edit Source"]')
+            .click({ timeout: 2_000 });
+          await form.locator('h1', { hasText: 'offline' }).waitFor({ timeout: 2_000 });
+        },
+        30_000,
+      );
 
       step('deleting asks for confirmation (modal dialog, answered with Delete)');
       await form.locator('[data-source="demo-ci"]').click();
@@ -165,7 +174,8 @@ async function main(): Promise<void> {
       await page.locator('.tab.active', { hasText: 'Leuchtturm Sources' }).waitFor();
     } catch (err) {
       // A picture of the window says more than a timeout message.
-      const shot = path.join(os.tmpdir(), 'leuchtturm-ui-failure.png');
+      // In the repository, so that CI can upload it (.test-failures/ is ignored by git).
+      const shot = path.join(ROOT, '.test-failures', 'ui.png');
       await page.screenshot({ path: shot }).catch(() => undefined);
       console.error(`Screenshot of the failure: ${shot}`); // eslint-disable-line no-console
       throw err;

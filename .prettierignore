@@ -7,3 +7,4 @@ docs/SPEC.md
 CLAUDE.md
 .sandbox
 .remote-test
+.test-failures

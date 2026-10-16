@@ -74,6 +74,9 @@ async function main(): Promise<void> {
           LEUCHTTURM_IT_PROXY: scenario.proxyUrl,
         },
       });
+    } catch (err) {
+      await saveExtensionLog(scenario.userDataDir);
+      throw err;
     } finally {
       await scenario.close();
     }
@@ -81,6 +84,28 @@ async function main(): Promise<void> {
     await removeTempDir(tmp);
   }
   process.exitCode = 0;
+}
+
+/**
+ * Prints Leuchtturm's own log (VS Code writes each extension's output channel to a file in the
+ * profile) and saves it to .test-failures/, which CI uploads: the assertion alone rarely says
+ * why a check or an install went differently.
+ */
+async function saveExtensionLog(userDataDir: string): Promise<void> {
+  const logs = path.join(userDataDir, 'logs');
+  const files = (await fs.readdir(logs, { recursive: true }).catch(() => []))
+    .filter((f) => f.includes('leuchtturm-updater') && f.endsWith('.log'))
+    .map((f) => path.join(logs, f));
+  for (const file of files) {
+    const text = await fs.readFile(file, 'utf8');
+    // eslint-disable-next-line no-console
+    console.error(`\n--- ${path.relative(logs, file)} ---\n${text}`);
+    await fs.mkdir(path.join(ROOT, '.test-failures'), { recursive: true });
+    await fs.writeFile(
+      path.join(ROOT, '.test-failures', `integration-${path.basename(file)}`),
+      text,
+    );
+  }
 }
 
 main().catch((err: unknown) => {

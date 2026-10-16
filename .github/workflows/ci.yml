@@ -41,6 +41,14 @@ jobs:
         run: dbus-run-session -- xvfb-run -a npm run test:ui
       # Also checks that the README images will show on the extension page.
       - run: npm run package
+      # On failure: Leuchtturm's log from the integration tests, the UI test's screenshot.
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: test-failures-${{ matrix.os }}
+          path: .test-failures/
+          include-hidden-files: true
+          if-no-files-found: ignore
 
   # Leuchtturm in a real Dev Containers window (Docker is preinstalled on Ubuntu runners).
   remote:
