@@ -654,5 +654,10 @@
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.71.2",
     "vitest": "^4.1.12"
+  },
+  "allowScripts": {
+    "esbuild": false,
+    "@vscode/vsce-sign": false,
+    "fsevents": false
   }
 }

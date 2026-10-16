@@ -20,6 +20,8 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
+      # actions/checkout runs `git init`; without a default branch name git prints a long hint.
+      - run: git config --global init.defaultBranch main
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
@@ -44,6 +46,8 @@ jobs:
   remote:
     runs-on: ubuntu-latest
     steps:
+      # actions/checkout runs `git init`; without a default branch name git prints a long hint.
+      - run: git config --global init.defaultBranch main
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
@@ -56,6 +60,8 @@ jobs:
   jenkins:
     runs-on: ubuntu-latest
     steps:
+      # actions/checkout runs `git init`; without a default branch name git prints a long hint.
+      - run: git config --global init.defaultBranch main
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
@@ -75,6 +81,8 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
+      # actions/checkout runs `git init`; without a default branch name git prints a long hint.
+      - run: git config --global init.defaultBranch main
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
