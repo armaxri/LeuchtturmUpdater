@@ -90,7 +90,7 @@ export interface Scenario {
 }
 
 /** Packages the demo extension under another name (with matching command IDs). */
-async function demo(name: string, displayName: string, version: string, out: string) {
+export async function demo(name: string, displayName: string, version: string, out: string) {
   await packageFixture(
     DEMO,
     {

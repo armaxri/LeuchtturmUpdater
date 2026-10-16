@@ -1,0 +1,24 @@
+{
+  "name": "jenkins",
+  "displayName": "Leuchtturm Demo Jenkins",
+  "description": "Demo extension built by the sandbox Jenkins. Shows which version is active.",
+  "version": "__VERSION__",
+  "publisher": "leuchtturm-demo",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "leuchtturm-demo.jenkins.version",
+        "title": "Which version is active?",
+        "category": "Leuchtturm Demo Jenkins"
+      }
+    ]
+  }
+}

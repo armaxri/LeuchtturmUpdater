@@ -105,7 +105,7 @@ function found(
   const extensions: FoundExtension[] = artifacts
     .map((a) => ({
       id: a.id,
-      displayName: a.displayName,
+      ...(a.displayName ? { displayName: a.displayName } : {}),
       versions: a.versions.map((v) => v.version).sort((x, y) => compareVersions(y, x)),
     }))
     .sort((a, b) => a.id.localeCompare(b.id));

@@ -103,9 +103,11 @@ npm test                  # unit tests (vitest)
 npm run test:integration  # end-to-end in a downloaded VS Code
 npm run test:remote       # the same demo in a Dev Containers window (needs Docker)
 npm run test:ui           # clicks through the source editor with Playwright
+npm run test:jenkins      # against a real Jenkins in Docker (pipeline builds new versions)
 npm run lint              # eslint + prettier + tsc
 npm run sandbox           # open a demo VS Code window (isolated profile, demo share)
 npm run sandbox -- --dev-container  # the same, inside a dev container (needs Docker)
+npm run full-sandbox      # the sandbox plus a real Jenkins in Docker; "Build Now" makes a new version
 npm run screenshots       # re-render docs/images/*.png from the demo scenario
 npm run package           # build the .vsix and check its README images
 ```

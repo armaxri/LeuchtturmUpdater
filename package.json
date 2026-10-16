@@ -635,7 +635,9 @@
     "sandbox": "npm run build && tsc -p . && node out/test/sandbox.js",
     "screenshots": "npm run build && tsc -p . && node out/test/screenshots.js",
     "test:remote": "npm run build && tsc -p . && node out/test/remote/runRemoteTest.js",
-    "test:ui": "npm run build && tsc -p . && node out/test/ui/runUiTest.js"
+    "test:ui": "npm run build && tsc -p . && node out/test/ui/runUiTest.js",
+    "test:jenkins": "npm run build && tsc -p . && node out/test/jenkins/runJenkinsTest.js",
+    "full-sandbox": "npm run build && tsc -p . && node out/test/sandbox.js --jenkins"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -116,3 +116,21 @@ sandbox. Leuchtturm keeps running on your machine and uses your local user setti
 4. Install _Leuchtturm Demo World_ through the Extensions view (`…` → _Install from VSIX…_, pick
    it from the share): Leuchtturm shows it as up to date after the next check. 🤖
 5. Update _Leuchtturm Demo Hello_: 1.1.0 is installed in the container. 🤖
+
+## Full sandbox: a real Jenkins
+
+Start with `npm run full-sandbox` (needs Docker; the first start builds a Jenkins image with the
+Pipeline plugins, which takes a few minutes and needs internet). Besides everything above, a
+real Jenkins runs in a container; `npm run full-sandbox` prints its address. Its job
+`demo-extension` is a pipeline that packages a new version of _Leuchtturm Demo Jenkins_ on every
+build: build #1 is 1.1.0, build #2 is 1.2.0, and so on. Version 1.0.0 is pre-installed. There is
+no login. Ctrl+C removes the container (and its builds).
+
+1. Open the Jenkins address in your browser and click **Build Now**. After a few seconds build
+   #1 is green and lists `leuchtturm-demo.jenkins-1.1.0.vsix` under its artifacts. 🤖
+2. In VS Code, click **+** in the Leuchtturm view and paste the job address (the job page, or
+   its _Last Successful Artifacts_). Leuchtturm finds _leuchtturm-demo.jenkins_ 1.1.0. 🤖 Save.
+3. _Leuchtturm Demo Jenkins 1.0.0 → 1.1.0_ appears under updates. Install it; after a reload
+   the status bar shows `jenkins 1.1.0`. 🤖
+4. Click **Build Now** again, then **Check for Updates** in Leuchtturm: 1.2.0 is offered, and
+   1.1.0 stays installable under _Install Specific Version…_. 🤖

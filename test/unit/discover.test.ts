@@ -9,8 +9,6 @@ import * as path from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { parseConfig } from '../../src/config';
-import { NULL_LOGGER } from '../../src/log';
 import {
   analyseFileNames,
   discover,
@@ -19,37 +17,17 @@ import {
   suggestName,
 } from '../../src/sourceEditor/discover';
 import type { Discovery } from '../../src/sourceEditor/protocol';
-import type { RawSource } from '../../src/sourceEditor/values';
-import { createSource } from '../../src/sources';
 import { startFakeServer, type FakeBuild, type FakeServer } from '../../src/test/fakeServer';
+import { listDraft } from '../../src/test/listDraft';
 import { makeVsix } from '../../src/test/zip';
-import { NEVER_CANCELLED } from '../../src/util/cancellation';
-import { settings, tempDir } from './helpers';
+import { tempDir } from './helpers';
 
 const servers: FakeServer[] = [];
 afterEach(async () => {
   await Promise.all(servers.splice(0).map((s) => s.close()));
 });
 
-/** Lists a candidate source with the real implementation, like `Controller.listDraft`. */
-async function list(name: string, raw: RawSource) {
-  const config = parseConfig(settings({ sources: { [name]: raw } }));
-  const parsed = config.sources[0];
-  if (!parsed) {
-    throw new Error(config.problems[0]?.message);
-  }
-  const source = createSource(parsed, NULL_LOGGER, {
-    timeoutMs: 10_000,
-    script: {
-      gate: { enabled: () => false, isApproved: () => false, requestApproval: () => undefined },
-      schema: {},
-      hostVersion: '1.99.0',
-    },
-  });
-  return source.list(NEVER_CANCELLED);
-}
-
-const look = (input: string) => discover(input, { list, timeoutMs: 10_000 });
+const look = (input: string) => discover(input, { list: listDraft, timeoutMs: 10_000 });
 
 /** Writes real .vsix files (with a manifest) and returns their paths by file name. */
 async function vsixFiles(files: Record<string, [string, string, string]>) {

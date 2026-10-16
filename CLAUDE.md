@@ -30,6 +30,8 @@ the milestones in §12 of the spec in order, and keep each milestone shippable (
 - `npm run lint`
 - `npm run test:remote`: the demo scenario in a real Dev Containers window (needs Docker)
 - `npm run test:ui`: Playwright clicks through webviews (the source editor) in the test VS Code
+- `npm run test:jenkins`: Leuchtturm against a real Jenkins in Docker (test/fixtures/jenkins/)
+- `npm run full-sandbox`: the sandbox plus that Jenkins; "Build Now" produces a new demo version
 - `npm run sandbox`: open a demo VS Code window (isolated profile, demo share); `-- --no-launch` only prepares it, `-- --dev-container` opens it inside a dev container
 - `npm run package`: produce the `.vsix` and check that the README images will show (VS Code's extension page only loads public `https` images; vsce points relative links at the public GitHub repo, so images appear once they are pushed)
 
@@ -49,6 +51,9 @@ reachable through `npm run sandbox` without any extra steps.
 - Webviews (the source editor) are out of reach for the mocha integration tests. Drive them
   with Playwright in `src/test/ui/runUiTest.ts` (`npm run test:ui`): click, type, and check
   the resulting settings.json. On failure it saves a screenshot of the window.
+- Real servers in Docker complement the fakes where behaviour matters: `src/test/dockerJenkins.ts`
+  starts a real Jenkins (pipeline job `demo-extension`) for `npm run full-sandbox` and
+  `npm run test:jenkins`. Still never real company servers.
 - Remote windows are covered the same way: `src/test/devContainer.ts` opens the scenario in a
   Dev Containers window for both `npm run test:remote` and `npm run sandbox -- --dev-container`.
   Run `npm run test:remote` after changes to settings, installing or extension lookups.

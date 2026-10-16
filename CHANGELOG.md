@@ -11,6 +11,9 @@ Milestone M6: polish.
   `http.noProxy`, proxy login). Verified by the integration tests, which send all traffic
   through a local proxy.
 - README screenshots, rendered automatically from the demo scenario (`npm run screenshots`).
+- Development: `npm run full-sandbox` adds a real Jenkins in Docker whose pipeline builds a new
+  version of a demo extension on every "Build Now"; `npm run test:jenkins` tests Leuchtturm
+  against it (also in CI).
 - **Add Source from a link**: paste where you download the extension (a Jenkins job or its
   "Last Successful Artifacts", a web page with `.vsix` links, a folder, an npm package name);
   Leuchtturm recognises it, shows the extensions and versions it found, and writes the

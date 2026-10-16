@@ -7,6 +7,8 @@
  *   --no-launch       prepare everything but do not open VS Code (used to validate the setup)
  *   --dev-container   open the workspace in a Dev Containers window (needs Docker); the
  *                     container is removed when you stop the sandbox
+ *   --jenkins         also start a real Jenkins in Docker with a pipeline that builds a new
+ *                     version of a demo extension on "Build Now" (`npm run full-sandbox`)
  *
  * Environment:
  *   CODE_CLI      VS Code CLI to use (default: `code`, or `code.cmd` on Windows)
@@ -22,8 +24,9 @@ import {
   prepareDevContainer,
   removeDevContainers,
 } from './devContainer';
+import { JENKINS_EXTENSION_ID, startJenkins, type DockerJenkins } from './dockerJenkins';
 import { ROOT } from './packageFixture';
-import { buildScenario } from './scenario';
+import { buildScenario, demo } from './scenario';
 
 const isWindows = process.platform === 'win32';
 const CODE = process.env.CODE_CLI ?? (isWindows ? 'code.cmd' : 'code');
@@ -54,7 +57,8 @@ function run(args: string[], detached = false, env: Record<string, string> = {})
 async function main(): Promise<void> {
   const launch = !process.argv.includes('--no-launch');
   const devContainer = process.argv.includes('--dev-container');
-  if (devContainer) {
+  const withJenkins = process.argv.includes('--jenkins');
+  if (devContainer || withJenkins) {
     pinDockerEngine();
   }
   const scenario = await buildScenario(
@@ -68,8 +72,21 @@ async function main(): Promise<void> {
     scenario.extensionsDir,
   ];
 
+  // Version 1.0.0 of the extension the Jenkins pipeline builds, so its first build (1.1.0)
+  // shows up as an update.
+  const preinstall = [...scenario.preinstall];
+  if (withJenkins) {
+    preinstall.push(
+      await demo(
+        'jenkins',
+        'Leuchtturm Demo Jenkins',
+        '1.0.0',
+        path.join(scenario.root, 'jenkins', `${JENKINS_EXTENSION_ID}-1.0.0.vsix`),
+      ),
+    );
+  }
   // In a container window, extensions start out uninstalled on the container side.
-  for (const vsix of devContainer ? [] : scenario.preinstall) {
+  for (const vsix of devContainer ? [] : preinstall) {
     await run([...profile, '--install-extension', vsix, '--force']);
   }
   const folderUri = devContainer ? await prepareDevContainer(scenario.workspace) : undefined;
@@ -78,11 +95,16 @@ async function main(): Promise<void> {
   }
 
   /* eslint-disable no-console */
+  let jenkins: DockerJenkins | undefined;
+  if (withJenkins) {
+    jenkins = await startJenkins((line) => console.log(line));
+  }
   console.log(`\nSandbox ready in ${scenario.root}`);
   if (!scenario.python) {
     console.log('No Python ≥ 3.8 found: the script source demo is left out.');
   }
   if (!launch) {
+    jenkins?.close();
     await scenario.close();
     return;
   }
@@ -112,10 +134,24 @@ async function main(): Promise<void> {
   console.log(`Fake web server: ${scenario.webUrl}/vsix/`);
   console.log(`Fake npm registry: ${scenario.npmUrl}  (npm is configured in .sandbox/npmrc)`);
   console.log(`Fake proxy (http.proxy): ${scenario.proxyUrl}`);
+  if (jenkins) {
+    console.log('');
+    console.log(`Jenkins (Docker):  ${jenkins.jobUrl}`);
+    console.log(
+      '  Click "Build Now" there: every build is a new version of Leuchtturm Demo Jenkins.',
+    );
+    console.log(
+      '  Then paste that link into Leuchtturm\'s "Add Source" (see TRY-ME.md, "Full sandbox").',
+    );
+  }
   console.log('Keep this running while you try things. Press Ctrl+C to stop the servers.');
   /* eslint-enable no-console */
   await new Promise<void>((resolve) => process.once('SIGINT', resolve));
   await scenario.close();
+  if (jenkins) {
+    console.log('Removing the Jenkins container…'); // eslint-disable-line no-console
+    jenkins.close();
+  }
   if (devContainer) {
     console.log('Removing the dev container…'); // eslint-disable-line no-console
     removeDevContainers(scenario.workspace);
