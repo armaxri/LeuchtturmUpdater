@@ -11,6 +11,12 @@ Milestone M6: polish.
   `http.noProxy`, proxy login). Verified by the integration tests, which send all traffic
   through a local proxy.
 - README screenshots, rendered automatically from the demo scenario (`npm run screenshots`).
+- Source editor: **Leuchtturm: Manage Sources** (the **+** in the view, _Edit Source_ on tree
+  items, a link on the Settings page) shows a form per source type. It validates with the same
+  rules as the checks, offers stored credentials and stores new ones, and tests the unsaved
+  form. VS Code's Settings page cannot edit nested objects, so this replaces hand-editing
+  settings.json. Tested end to end with Playwright (`npm run test:ui`).
+- Settings page: _Sources_ comes first instead of last (alphabetical order hid it).
 - Remote windows (Dev Containers, Remote-SSH, WSL): `leuchtturm.sources` and
   `leuchtturm.script.enabled` now have `"scope": "application"`. With `machine`, VS Code read
   them from the remote side, so Leuchtturm saw no sources in remote windows.

@@ -55,6 +55,24 @@
         "category": "Leuchtturm"
       },
       {
+        "command": "leuchtturm.addSource",
+        "title": "Add Source…",
+        "category": "Leuchtturm",
+        "icon": "$(add)"
+      },
+      {
+        "command": "leuchtturm.manageSources",
+        "title": "Manage Sources",
+        "category": "Leuchtturm",
+        "icon": "$(list-unordered)"
+      },
+      {
+        "command": "leuchtturm.editSource",
+        "title": "Edit Source",
+        "category": "Leuchtturm",
+        "icon": "$(edit)"
+      },
+      {
         "command": "leuchtturm.testSource",
         "title": "Test Source…",
         "category": "Leuchtturm",
@@ -121,28 +139,33 @@
         "leuchtturm.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "Master switch for Leuchtturm Updater."
+          "description": "Master switch for Leuchtturm Updater.",
+          "order": 2
         },
         "leuchtturm.checkInterval": {
           "type": "number",
           "default": 60,
           "minimum": 0,
-          "markdownDescription": "Minutes between update checks. `0` disables periodic checks. Values below 5 are raised to 5."
+          "markdownDescription": "Minutes between update checks. `0` disables periodic checks. Values below 5 are raised to 5.",
+          "order": 3
         },
         "leuchtturm.checkOnStartup": {
           "type": "boolean",
           "default": true,
-          "description": "Check for updates about 10 seconds after VS Code starts."
+          "description": "Check for updates about 10 seconds after VS Code starts.",
+          "order": 4
         },
         "leuchtturm.notify": {
           "type": "boolean",
           "default": true,
-          "description": "Show a notification when new updates are found. Leuchtturm never installs automatically; installing always needs a click."
+          "description": "Show a notification when new updates are found. Leuchtturm never installs automatically; installing always needs a click.",
+          "order": 5
         },
         "leuchtturm.includePrerelease": {
           "type": "boolean",
           "default": false,
-          "description": "Consider semver prerelease versions (e.g. 1.2.0-beta.1)."
+          "description": "Consider semver prerelease versions (e.g. 1.2.0-beta.1).",
+          "order": 7
         },
         "leuchtturm.statusBar": {
           "type": "string",
@@ -152,13 +175,14 @@
             "never"
           ],
           "default": "whenUpdates",
-          "description": "When to show the status bar item."
+          "description": "When to show the status bar item.",
+          "order": 6
         },
         "leuchtturm.sources": {
           "type": "object",
           "default": {},
           "scope": "application",
-          "markdownDescription": "Named update sources. Read from **user settings only**; workspace settings are ignored for security. See the [file source docs](https://github.com/armaxri/LeuchtturmUpdater/blob/main/docs/sources/file.md).",
+          "markdownDescription": "Named update sources. Read from **user settings only**; workspace settings are ignored for security.\n\n[Add or edit sources in a form](command:leuchtturm.manageSources) · [Documentation](https://github.com/armaxri/LeuchtturmUpdater/blob/main/docs/configuration.md)",
           "additionalProperties": {
             "type": "object",
             "required": [
@@ -433,7 +457,8 @@
                 }
               }
             }
-          }
+          },
+          "order": 0
         },
         "leuchtturm.extensions": {
           "type": "array",
@@ -467,30 +492,35 @@
                 }
               }
             ]
-          }
+          },
+          "order": 1
         },
         "leuchtturm.trackAllFromSources": {
           "type": "boolean",
           "default": false,
-          "description": "Show every extension any source offers, including ones that are not installed."
+          "description": "Show every extension any source offers, including ones that are not installed.",
+          "order": 8
         },
         "leuchtturm.http.timeout": {
           "type": "number",
           "default": 30,
           "minimum": 1,
-          "description": "Default request timeout in seconds."
+          "description": "Default request timeout in seconds.",
+          "order": 11
         },
         "leuchtturm.script.timeout": {
           "type": "number",
           "default": 120,
           "minimum": 1,
-          "description": "Default timeout in seconds for one script run."
+          "description": "Default timeout in seconds for one script run.",
+          "order": 10
         },
         "leuchtturm.script.enabled": {
           "type": "boolean",
           "default": false,
           "scope": "application",
-          "markdownDescription": "Allow `script` sources to run programs. Only the value in your **user settings** counts; workspace settings cannot turn this on. Each script also needs a one-time approval."
+          "markdownDescription": "Allow `script` sources to run programs. Only the value in your **user settings** counts; workspace settings cannot turn this on. Each script also needs a one-time approval.",
+          "order": 9
         }
       }
     },
@@ -517,7 +547,7 @@
       {
         "view": "leuchtturm.updates",
         "when": "leuchtturm.noSources",
-        "contents": "No update sources are configured yet. Add one to \"leuchtturm.sources\" in your user settings.\n[Open Settings](command:leuchtturm.openSettings)\n[Read the docs](https://github.com/armaxri/LeuchtturmUpdater/blob/main/docs/sources/file.md)"
+        "contents": "No update sources are configured yet. A source tells Leuchtturm where your company publishes extensions: a file share, a web server or Jenkins, an npm registry, or your own script.\n[Add Source](command:leuchtturm.addSource)\n[Read the docs](https://github.com/armaxri/LeuchtturmUpdater/blob/main/docs/sources/file.md)"
       },
       {
         "view": "leuchtturm.updates",
@@ -527,6 +557,11 @@
     ],
     "menus": {
       "view/title": [
+        {
+          "command": "leuchtturm.addSource",
+          "when": "view == leuchtturm.updates",
+          "group": "navigation@0"
+        },
         {
           "command": "leuchtturm.checkNow",
           "when": "view == leuchtturm.updates",
@@ -546,6 +581,11 @@
           "command": "leuchtturm.showLog",
           "when": "view == leuchtturm.updates",
           "group": "navigation@4"
+        },
+        {
+          "command": "leuchtturm.manageSources",
+          "when": "view == leuchtturm.updates",
+          "group": "more@0"
         },
         {
           "command": "leuchtturm.testSource",
@@ -613,6 +653,16 @@
           "command": "leuchtturm.tree.releaseNotes",
           "when": "view == leuchtturm.updates && viewItem =~ /^version.*\\.notes$/",
           "group": "2_info@1"
+        },
+        {
+          "command": "leuchtturm.editSource",
+          "when": "view == leuchtturm.updates && viewItem == problem.source",
+          "group": "inline@1"
+        },
+        {
+          "command": "leuchtturm.editSource",
+          "when": "view == leuchtturm.updates && viewItem =~ /^problem\\.source|^artifact\\./",
+          "group": "3_source@1"
         }
       ],
       "commandPalette": [
@@ -635,6 +685,10 @@
         {
           "command": "leuchtturm.tree.releaseNotes",
           "when": "false"
+        },
+        {
+          "command": "leuchtturm.editSource",
+          "when": "false"
         }
       ]
     }
@@ -643,7 +697,7 @@
     "vscode:prepublish": "npm run build -- --production",
     "build": "node esbuild.mjs",
     "watch": "node esbuild.mjs --watch",
-    "typecheck": "tsc -p . --noEmit && tsc -p tsconfig.vitest.json",
+    "typecheck": "tsc -p . --noEmit && tsc -p tsconfig.webview.json && tsc -p tsconfig.vitest.json",
     "lint": "eslint . && prettier --check . && npm run typecheck",
     "format": "prettier --write .",
     "test": "vitest run",
@@ -653,7 +707,8 @@
     "package": "vsce package",
     "sandbox": "npm run build && tsc -p . && node out/test/sandbox.js",
     "screenshots": "npm run build && tsc -p . && node out/test/screenshots.js",
-    "test:remote": "npm run build && tsc -p . && node out/test/remote/runRemoteTest.js"
+    "test:remote": "npm run build && tsc -p . && node out/test/remote/runRemoteTest.js",
+    "test:ui": "npm run build && tsc -p . && node out/test/ui/runUiTest.js"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

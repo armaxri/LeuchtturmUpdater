@@ -83,7 +83,16 @@ a modal dialog.
     then install it. 🤖 Run **Test Source…** → `script` to see the exact command line, the
     script's stderr and its JSON output. 🤖 Untick the setting again: the source turns back
     into a problem without running. 🤖
-15. Stop `npm run sandbox` with Ctrl+C and run **Leuchtturm: Check for Updates**: the
+15. Sources in a form: click **+** in the Leuchtturm view (_Add Source…_). Pick _File share or
+    folder_, call it `team`, enter any folder and click **Test**: the result shows below the
+    form. 🤖 **Save**: `team` appears in your user settings.json and in the list. 🤖 Open
+    `jenkins`: every field is filled in, and a warning says the credential is not stored yet. 🤖
+    Click **Store new…** next to the password, keep the name `jenkins-demo`, enter
+    `demo-password`: the warning disappears. Empty the download URL: Save is disabled and the
+    error names the field; **Revert** restores it. 🤖 The pencil on the `offline` problem opens
+    that source. 🤖 **Delete** `team` (confirm the dialog). 🤖 The Settings page (gear icon) lists
+    _Sources_ first, with a link to this form. 🤖
+16. Stop `npm run sandbox` with Ctrl+C and run **Leuchtturm: Check for Updates**: the
     `jenkins`, `web` and `npm` sources show up as problems, the share keeps working.
 
 ## Remote windows

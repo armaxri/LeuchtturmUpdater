@@ -29,6 +29,7 @@ the milestones in §12 of the spec in order, and keep each milestone shippable (
 - `npm run test:integration`: `@vscode/test-electron`
 - `npm run lint`
 - `npm run test:remote`: the demo scenario in a real Dev Containers window (needs Docker)
+- `npm run test:ui`: Playwright clicks through webviews (the source editor) in the test VS Code
 - `npm run sandbox`: open a demo VS Code window (isolated profile, demo share); `-- --no-launch` only prepares it, `-- --dev-container` opens it inside a dev container
 - `npx vsce package`: produce the `.vsix`
 
@@ -45,6 +46,9 @@ reachable through `npm run sandbox` without any extra steps.
 - Only steps that automation cannot drive (modal dialogs, visual checks) are left for the
   sandbox alone. Say so in TRY-ME.md.
 - Before calling a milestone done, run `npm run sandbox -- --no-launch` to check that the setup builds.
+- Webviews (the source editor) are out of reach for the mocha integration tests. Drive them
+  with Playwright in `src/test/ui/runUiTest.ts` (`npm run test:ui`): click, type, and check
+  the resulting settings.json. On failure it saves a screenshot of the window.
 - Remote windows are covered the same way: `src/test/devContainer.ts` opens the scenario in a
   Dev Containers window for both `npm run test:remote` and `npm run sandbox -- --dev-container`.
   Run `npm run test:remote` after changes to settings, installing or extension lookups.

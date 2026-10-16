@@ -160,7 +160,7 @@ export class LeuchtturmTreeProvider implements vscode.TreeDataProvider<Node> {
         item.iconPath = themeIcon('warning', 'problemsWarningIcon.foreground');
         const action = node.problem.action;
         item.tooltip = `${node.problem.message}\n\nClick to ${action ? action.title.replace(/…$/, '').toLowerCase() : 'open the log'}.`;
-        item.contextValue = 'problem';
+        item.contextValue = node.problem.source ? 'problem.source' : 'problem';
         item.command = action
           ? { command: action.command, title: action.title, arguments: action.arguments }
           : { command: 'leuchtturm.showLog', title: 'Show Log' };

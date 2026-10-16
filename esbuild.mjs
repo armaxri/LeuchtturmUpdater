@@ -1,5 +1,5 @@
 // Bundles src/extension.ts into a single dist/extension.js (CommonJS, as VS Code expects),
-// and packages the remote helper (src/helper/) into dist/leuchtturm-remote-helper.vsix, which
+// the source editor page into dist/sourceEditor.js, and packages the remote helper (src/helper/) into dist/leuchtturm-remote-helper.vsix, which
 // ships inside Leuchtturm's own .vsix.
 import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 
@@ -48,17 +48,30 @@ async function buildHelper() {
   });
 }
 
-const ctx = await esbuild.context({
-  ...common,
-  entryPoints: ['src/extension.ts'],
-  outfile: 'dist/extension.js',
-  sourcemap: !production,
-});
+const contexts = [
+  await esbuild.context({
+    ...common,
+    entryPoints: ['src/extension.ts'],
+    outfile: 'dist/extension.js',
+    sourcemap: !production,
+  }),
+  // The source editor page runs in a webview (a browser frame), not in Node.
+  await esbuild.context({
+    ...common,
+    entryPoints: ['src/sourceEditor/webview/main.ts'],
+    outfile: 'dist/sourceEditor.js',
+    format: 'iife',
+    platform: 'browser',
+    target: 'es2022',
+    external: [],
+    sourcemap: production ? false : 'inline',
+  }),
+];
 
 await buildHelper();
 if (watch) {
-  await ctx.watch();
+  await Promise.all(contexts.map((c) => c.watch()));
 } else {
-  await ctx.rebuild();
-  await ctx.dispose();
+  await Promise.all(contexts.map((c) => c.rebuild()));
+  await Promise.all(contexts.map((c) => c.dispose()));
 }

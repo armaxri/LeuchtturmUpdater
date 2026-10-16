@@ -4,28 +4,37 @@ All settings live under `leuchtturm.*`. `leuchtturm.sources` (and `leuchtturm.sc
 are read from your **user** settings only; values in a workspace's `.vscode/settings.json` are
 ignored, so a cloned repository cannot add download locations.
 
+VS Code's Settings page cannot show input fields for nested objects such as
+`leuchtturm.sources`. Use **Leuchtturm: Manage Sources** instead (also the **+** button in the
+Leuchtturm view, _Edit Source_ on a problem or extension in the view, and the link on the
+Settings page). It shows a form for each source type, checks the fields with the same rules as
+the checks themselves, warns about missing or plain-text credentials, stores new credentials in
+the secret storage, and runs _Test Source_ on the unsaved form. Fields the form does not know
+are kept as they are. Saving rewrites the `leuchtturm.sources` entry in your settings.json, so
+comments inside that entry are lost.
+
 ## Settings
 
-| Setting                          | Default       | Description                                                                    |
-| -------------------------------- | ------------- | ------------------------------------------------------------------------------ |
-| `leuchtturm.enabled`             | `true`        | Master switch.                                                                 |
-| `leuchtturm.checkInterval`       | `60`          | Minutes between checks. `0` disables periodic checks; values below 5 become 5. |
-| `leuchtturm.checkOnStartup`      | `true`        | Check about 10 s after VS Code starts.                                         |
-| `leuchtturm.notify`              | `true`        | Notify about newly found updates. There is intentionally no auto-install.      |
-| `leuchtturm.includePrerelease`   | `false`       | Consider semver prereleases such as `1.2.0-beta.1`.                            |
-| `leuchtturm.statusBar`           | `whenUpdates` | `always`, `whenUpdates` or `never`.                                            |
-| `leuchtturm.sources`             | `{}`          | Named sources: [`file`](sources/file.md), [`http`](sources/http.md).           |
-| `leuchtturm.extensions`          | `[]`          | What to track (see below).                                                     |
-| `leuchtturm.trackAllFromSources` | `false`       | Also list extensions that are offered but not installed.                       |
-| `leuchtturm.http.timeout`        | `30`          | Default timeout in seconds for listing a source.                               |
-| `leuchtturm.script.timeout`      | `120`         | Default script timeout (script sources, coming later).                         |
-| `leuchtturm.script.enabled`      | `false`       | Opt-in for script sources (coming later), user settings only.                  |
+| Setting                          | Default       | Description                                                                                                                  |
+| -------------------------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `leuchtturm.enabled`             | `true`        | Master switch.                                                                                                               |
+| `leuchtturm.checkInterval`       | `60`          | Minutes between checks. `0` disables periodic checks; values below 5 become 5.                                               |
+| `leuchtturm.checkOnStartup`      | `true`        | Check about 10 s after VS Code starts.                                                                                       |
+| `leuchtturm.notify`              | `true`        | Notify about newly found updates. There is intentionally no auto-install.                                                    |
+| `leuchtturm.includePrerelease`   | `false`       | Consider semver prereleases such as `1.2.0-beta.1`.                                                                          |
+| `leuchtturm.statusBar`           | `whenUpdates` | `always`, `whenUpdates` or `never`.                                                                                          |
+| `leuchtturm.sources`             | `{}`          | Named sources: [`file`](sources/file.md), [`http`](sources/http.md), [`npm`](sources/npm.md), [`script`](sources/script.md). |
+| `leuchtturm.extensions`          | `[]`          | What to track (see below).                                                                                                   |
+| `leuchtturm.trackAllFromSources` | `false`       | Also list extensions that are offered but not installed.                                                                     |
+| `leuchtturm.http.timeout`        | `30`          | Default timeout in seconds for listing a source.                                                                             |
+| `leuchtturm.script.timeout`      | `120`         | Default timeout in seconds for one script run.                                                                               |
+| `leuchtturm.script.enabled`      | `false`       | Opt-in for script sources, user settings only.                                                                               |
 
 ## Common source fields
 
 | Field                | Description                                                                                                  |
 | -------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `type`               | `file` or `http` (`npm` and `script` follow).                                                                |
+| `type`               | `file`, `http`, `npm` or `script`.                                                                           |
 | `enabled`            | `false` switches the source off.                                                                             |
 | `timeout`            | Seconds for listing the source.                                                                              |
 | `include`, `exclude` | Glob filters on extension IDs, e.g. `["corp.*"]`. `*` matches anything, `?` one character, case-insensitive. |

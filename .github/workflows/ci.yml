@@ -27,6 +27,9 @@ jobs:
       - name: Integration tests
         if: runner.os != 'Linux'
         run: npm run test:integration
+      - name: UI test (source editor, Linux only)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a npm run test:ui
       - run: npx vsce package
       - uses: actions/upload-artifact@v4
         if: runner.os == 'Linux'

@@ -1,6 +1,8 @@
 **
 !dist/extension.js
 !dist/leuchtturm-remote-helper.vsix
+!dist/sourceEditor.js
+!media/sourceEditor.css
 !media/icon.png
 !media/icon-128.png
 !media/activitybar.svg

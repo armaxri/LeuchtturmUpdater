@@ -1,0 +1,11 @@
+{
+  // The source editor page runs in a browser frame, not in Node: DOM types, no Node types.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM"],
+    "types": [],
+    "noEmit": true
+  },
+  "include": ["src/sourceEditor/webview"],
+  "exclude": []
+}

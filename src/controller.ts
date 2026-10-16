@@ -14,7 +14,13 @@ import {
   type SourceEntry,
   type SourceResult,
 } from './checker';
-import { parseConfig, parseSettings, referencedSecrets, type Config } from './config';
+import {
+  parseConfig,
+  parseSettings,
+  referencedSecrets,
+  type Config,
+  type SourceConfig,
+} from './config';
 import type { Installer } from './installer';
 import { errorMessage, type RedactingLogger } from './log';
 import { createSource } from './sources';
@@ -123,42 +129,12 @@ export class Controller implements vscode.Disposable {
   /** Reads settings and secrets and recreates the sources. */
   async loadConfig(): Promise<Config> {
     const get = readRawSettings();
-    const secrets: Record<string, string> = {};
-    for (const name of referencedSecrets(get('sources'))) {
-      const value = await this.secrets.get(secretStorageKey(name));
-      if (value !== undefined) {
-        this.log.redactor.add(value);
-        secrets[name] = value;
-      }
-    }
+    const secrets = await this.resolveSecrets(get('sources'));
     const config = parseConfig(get, { secrets });
     for (const p of config.problems) {
       this.log.warn(p.message);
     }
-    const defaultTimeoutMs = (type: string) =>
-      (type === 'script'
-        ? config.settings.scriptTimeoutSeconds
-        : config.settings.httpTimeoutSeconds) * 1000;
-    for (const c of config.sources) {
-      if (c.type === 'http' || c.type === 'npm') {
-        c.sensitiveValues.forEach((v) => this.log.redactor.add(v));
-      }
-    }
-    this.sources = new Map(
-      config.sources.map((c) => [
-        c.name,
-        {
-          source: createSource(c, this.log, {
-            timeoutMs: defaultTimeoutMs(c.type),
-            addSecret: (v) => this.log.redactor.add(v),
-            script: { gate: this.scriptGate, ...this.scriptInfo },
-          }),
-          timeoutMs: c.timeoutSeconds ? c.timeoutSeconds * 1000 : defaultTimeoutMs(c.type),
-          include: c.include,
-          exclude: c.exclude,
-        },
-      ]),
-    );
+    this.sources = new Map(config.sources.map((c) => [c.name, this.createEntry(c, config)]));
     // RegExp objects serialize to `{}`, so write their source text instead.
     this.fingerprints = new Map(
       config.sources.map((c) => [
@@ -173,6 +149,39 @@ export class Controller implements vscode.Disposable {
       config.sources.length === 0 && config.problems.every((p) => !p.source),
     );
     return config;
+  }
+
+  /** Reads the secrets that `${secret:NAME}` references in `rawSources` point to. */
+  private async resolveSecrets(rawSources: unknown): Promise<Record<string, string>> {
+    const secrets: Record<string, string> = {};
+    for (const name of referencedSecrets(rawSources)) {
+      const value = await this.secrets.get(secretStorageKey(name));
+      if (value !== undefined) {
+        this.log.redactor.add(value);
+        secrets[name] = value;
+      }
+    }
+    return secrets;
+  }
+
+  private createEntry(c: SourceConfig, config: Config): SourceEntry {
+    const defaultTimeoutMs =
+      (c.type === 'script'
+        ? config.settings.scriptTimeoutSeconds
+        : config.settings.httpTimeoutSeconds) * 1000;
+    if (c.type === 'http' || c.type === 'npm') {
+      c.sensitiveValues.forEach((v) => this.log.redactor.add(v));
+    }
+    return {
+      source: createSource(c, this.log, {
+        timeoutMs: defaultTimeoutMs,
+        addSecret: (v) => this.log.redactor.add(v),
+        script: { gate: this.scriptGate, ...this.scriptInfo },
+      }),
+      timeoutMs: c.timeoutSeconds ? c.timeoutSeconds * 1000 : defaultTimeoutMs,
+      include: c.include,
+      exclude: c.exclude,
+    };
   }
 
   /** Runs a check. Concurrent calls share the check that is already running. */
@@ -691,15 +700,51 @@ export class Controller implements vscode.Disposable {
       }
     }
 
+    const text = await this.runTest(
+      name,
+      this.sources.get(name),
+      invalid.find((p) => p.source === name)?.message,
+    );
+    this.log.info(text);
+    this.log.show();
+    return this.log.redactor.redact(text);
+  }
+
+  /**
+   * Tests a source as it is being edited (not saved yet), for the source editor. Uses the
+   * current settings otherwise, and the stored credentials.
+   */
+  async testDraft(name: string, raw: unknown): Promise<string> {
+    const get = readRawSettings();
+    const draft = { [name]: raw };
+    const secrets = await this.resolveSecrets(draft);
+    const config = parseConfig((key) => (key === 'sources' ? draft : get(key)), { secrets });
+    const parsed = config.sources[0];
+    const text = await this.runTest(
+      name,
+      parsed && this.createEntry(parsed, config),
+      config.problems.find((p) => p.source === name)?.message ??
+        (raw !== null && typeof raw === 'object' && (raw as { enabled?: unknown }).enabled === false
+          ? 'The source is disabled.'
+          : undefined),
+    );
+    this.log.info(text);
+    return this.log.redactor.redact(text);
+  }
+
+  /** Lists one source and describes everything it found (Test Source). */
+  private async runTest(
+    name: string,
+    entry: SourceEntry | undefined,
+    problem: string | undefined,
+  ): Promise<string> {
     const lines: string[] = [];
     const out = (line: string): void => {
       lines.push(line);
     };
     out(`===== Test source "${name}" =====`);
-    const entry = this.sources.get(name);
-    const problem = invalid.find((p) => p.source === name);
     if (!entry) {
-      out(problem ? problem.message : `No enabled source named "${name}".`);
+      out(problem ?? `No enabled source named "${name}".`);
     } else {
       const { source, timeoutMs, include, exclude } = entry;
       out(`Type: ${source.type}, timeout: ${timeoutMs / 1000} s`);
@@ -742,9 +787,6 @@ export class Controller implements vscode.Disposable {
         out(`FAILED after ${Date.now() - start} ms: ${errorMessage(err)}`);
       }
     }
-    const text = lines.join('\n');
-    this.log.info(text);
-    this.log.show();
-    return this.log.redactor.redact(text);
+    return lines.join('\n');
   }
 }

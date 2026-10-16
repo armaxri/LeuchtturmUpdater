@@ -16,5 +16,7 @@
     "rootDir": "src",
     "outDir": "out"
   },
-  "include": ["src"]
+  "include": ["src"],
+  // Browser code, checked by tsconfig.webview.json.
+  "exclude": ["src/sourceEditor/webview"]
 }

@@ -11,6 +11,7 @@ import * as vscode from 'vscode';
 import type { CheckState } from './checker';
 import { Controller } from './controller';
 import { HELPER_VSIX } from './helper/protocol';
+import { SourceEditorPanel } from './sourceEditor/panel';
 import { Installer } from './installer';
 import { errorMessage, RedactingLogger } from './log';
 import { canLead, Scheduler } from './scheduler';
@@ -198,6 +199,29 @@ export async function activate(context: vscode.ExtensionContext): Promise<Leucht
             'extensions on the remote side stay invisible.',
         );
       }
+    }),
+    // The source editor: VS Code's Settings UI cannot edit nested objects like our sources.
+    command('leuchtturm.manageSources', () => {
+      SourceEditorPanel.show(context, controller);
+    }),
+    command('leuchtturm.addSource', () => {
+      SourceEditorPanel.show(context, controller, { kind: 'new' });
+    }),
+    // From the tree (a problem or artifact node), a link, or a test with a source name.
+    command('leuchtturm.editSource', (arg?: Node | string) => {
+      const name =
+        typeof arg === 'string'
+          ? arg
+          : arg?.type === 'problem'
+            ? arg.problem.source
+            : arg?.type === 'artifact'
+              ? (arg.artifact.latest ?? arg.artifact.candidates[0])?.sourceName
+              : undefined;
+      SourceEditorPanel.show(
+        context,
+        controller,
+        name ? { kind: 'source', name } : { kind: 'list' },
+      );
     }),
     command('leuchtturm.openSettings', () =>
       vscode.commands.executeCommand(

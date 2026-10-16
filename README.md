@@ -12,8 +12,14 @@ It uses only public VS Code APIs and does not touch VS Code's marketplace config
 
 1. Put your `.vsix` files in a folder or on a share, named as `vsce package` names them:
    `corp.linter-1.4.1.vsix`.
-2. Open your **user** settings (Command Palette → _Preferences: Open User Settings (JSON)_) and
-   add:
+2. Open the Leuchtturm view and click **+** (_Add Source…_). Pick _File share or folder_,
+   enter the folder and save. The form checks every field as you type, and **Test** shows what
+   the source finds before you rely on it.
+
+   ![The source editor](docs/images/source-editor.png)
+
+   The form writes to your user settings. You can also edit them directly
+   (_Preferences: Open User Settings (JSON)_):
 
    ```jsonc
    "leuchtturm.sources": {
@@ -30,13 +36,14 @@ Sources are read from user settings only. A `leuchtturm.sources` entry in a work
 
 ## Commands
 
-| Command                               | What it does                                                           |
-| ------------------------------------- | ---------------------------------------------------------------------- |
-| Leuchtturm: Check for Updates         | Checks all sources now.                                                |
-| Leuchtturm: Update Extension…         | Pick from the available updates and install them.                      |
-| Leuchtturm: Install Specific Version… | Install any offered version, including downgrades (with confirmation). |
-| Leuchtturm: Reset Skipped Versions    | Forget versions skipped from a notification.                           |
-| Leuchtturm: Show Log                  | Opens the "Leuchtturm Updater" output channel.                         |
+| Command                                  | What it does                                                           |
+| ---------------------------------------- | ---------------------------------------------------------------------- |
+| Leuchtturm: Check for Updates            | Checks all sources now.                                                |
+| Leuchtturm: Add Source… / Manage Sources | Opens the source editor: a form per source, with validation and Test.  |
+| Leuchtturm: Update Extension…            | Pick from the available updates and install them.                      |
+| Leuchtturm: Install Specific Version…    | Install any offered version, including downgrades (with confirmation). |
+| Leuchtturm: Reset Skipped Versions       | Forget versions skipped from a notification.                           |
+| Leuchtturm: Show Log                     | Opens the "Leuchtturm Updater" output channel.                         |
 
 ## Settings
 
@@ -91,6 +98,7 @@ npm run build             # bundle into dist/extension.js
 npm test                  # unit tests (vitest)
 npm run test:integration  # end-to-end in a downloaded VS Code
 npm run test:remote       # the same demo in a Dev Containers window (needs Docker)
+npm run test:ui           # clicks through the source editor with Playwright
 npm run lint              # eslint + prettier + tsc
 npm run sandbox           # open a demo VS Code window (isolated profile, demo share)
 npm run sandbox -- --dev-container  # the same, inside a dev container (needs Docker)

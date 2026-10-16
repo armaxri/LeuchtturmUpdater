@@ -4,28 +4,17 @@
  * window (never the rest of the screen). Output: docs/images/*.png.
  */
 
-import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import {
-  downloadAndUnzipVSCode,
-  resolveCliArgsFromVSCodeExecutablePath,
-} from '@vscode/test-electron';
-import { _electron as electron, type Page } from 'playwright-core';
+import type { Page } from 'playwright-core';
 
+import { activeWebview, launchWorkbench, runCommand } from './electron';
 import { ROOT } from './paths';
 import { buildScenario, IDS } from './scenario';
 
 const OUT = path.join(ROOT, 'docs/images');
-
-async function runCommand(page: Page, title: string): Promise<void> {
-  await page.keyboard.press('F1');
-  await page.locator('.quick-input-widget input').fill(`>${title}`);
-  await page.waitForTimeout(400);
-  await page.keyboard.press('Enter');
-}
 
 /** Drags the sash on the side bar's right edge (the commands depend on focus). */
 async function widenSidebar(page: Page, by: number): Promise<void> {
@@ -69,42 +58,10 @@ async function main(): Promise<void> {
     ['offline', 'script'],
   );
   try {
-    const executablePath = await downloadAndUnzipVSCode();
-    const profile = [
-      '--user-data-dir',
-      scenario.userDataDir,
-      '--extensions-dir',
-      scenario.extensionsDir,
-    ];
-    const [cli, ...cliArgs] = resolveCliArgsFromVSCodeExecutablePath(executablePath);
-    for (const vsix of scenario.preinstall) {
-      spawnSync(cli!, [...cliArgs, ...profile, '--install-extension', vsix], {
-        shell: process.platform === 'win32',
-      });
-    }
-
     const step = (text: string) => console.log(`- ${text}`); // eslint-disable-line no-console
-    const app = await electron.launch({
-      executablePath,
-      args: [
-        scenario.workspace,
-        ...profile,
-        `--extensionDevelopmentPath=${ROOT}`,
-        '--skip-welcome',
-        '--skip-release-notes',
-        '--disable-workspace-trust',
-      ],
-    });
+    step('waiting for the workbench');
+    const { app, page } = await launchWorkbench(scenario);
     try {
-      step('waiting for the workbench');
-      const page = await app.firstWindow();
-      page.setDefaultTimeout(30_000);
-      await page.waitForSelector('.monaco-workbench', { timeout: 60_000 });
-      await app.evaluate(({ BrowserWindow }) => {
-        BrowserWindow.getAllWindows()[0]?.setContentSize(1180, 720);
-      });
-      await page.waitForTimeout(1500);
-
       // The startup check runs ~10 s after activation and announces the updates.
       step('waiting for the update notification');
       const toast = page.locator('.notification-toast', { hasText: 'Leuchtturm' });
@@ -130,6 +87,14 @@ async function main(): Promise<void> {
         path: path.join(OUT, 'sidebar.png'),
         clip: { x: 0, y: 0, width: bar.x + bar.width + 40, height },
       });
+
+      step('opening the source editor');
+      await runCommand(page, 'Leuchtturm: Manage Sources');
+      const form = activeWebview(page);
+      await form.locator('[data-source="jenkins"]').click();
+      await form.locator('#field-index-url').waitFor();
+      await page.waitForTimeout(800);
+      await page.locator('.part.editor').screenshot({ path: path.join(OUT, 'source-editor.png') });
     } finally {
       // Never leave the VS Code test window open, even after a failure.
       await app.close();
