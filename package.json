@@ -2,7 +2,7 @@
   "name": "leuchtturm-updater",
   "displayName": "Leuchtturm Updater",
   "description": "Keeps privately distributed VS Code extensions up to date from file shares, npm registries, Jenkins or custom scripts.",
-  "version": "1.0.0",
+  "version": "99.99.99",
   "publisher": "armaxri",
   "license": "MIT",
   "icon": "media/icon.png",

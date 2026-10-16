@@ -10,7 +10,7 @@ import * as path from 'node:path';
 
 import {
   downloadAndUnzipVSCode,
-  resolveCliArgsFromVSCodeExecutablePath,
+  resolveCliPathFromVSCodeExecutablePath,
   runTests,
 } from '@vscode/test-electron';
 
@@ -49,13 +49,10 @@ async function main(): Promise<void> {
       scenario.extensionsDir,
     ];
     const vscodeExecutablePath = await downloadAndUnzipVSCode();
-    const [cli, ...cliArgs] = resolveCliArgsFromVSCodeExecutablePath(vscodeExecutablePath);
-    await runCodeCli(cli!, [
-      ...cliArgs,
-      ...profile,
-      '--install-extension',
-      DEV_CONTAINERS_EXTENSION,
-    ]);
+    // The CLI path only: our own profile arguments replace test-electron's default profile
+    // (passing both made VS Code warn "Option user-data-dir is defined more than once").
+    const cli = resolveCliPathFromVSCodeExecutablePath(vscodeExecutablePath);
+    await runCodeCli(cli, [...profile, '--install-extension', DEV_CONTAINERS_EXTENSION]);
 
     await runTests({
       vscodeExecutablePath,

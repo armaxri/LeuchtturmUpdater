@@ -26,6 +26,9 @@ export async function packageFixture(
       manifestPath,
       JSON.stringify({ ...manifest, ...manifestOverrides }, null, 2),
     );
+    // Everything in a fixture belongs into its package; an (empty) ignore file says so, and
+    // stops vsce from warning that there is none.
+    await fs.writeFile(path.join(dir, '.vscodeignore'), '', { flag: 'a' });
     await fs.mkdir(path.dirname(outFile), { recursive: true });
     // `dependencies: false` is accepted at runtime but missing from the published types.
     const options = {

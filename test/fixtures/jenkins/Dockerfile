@@ -3,11 +3,11 @@
 #
 # Local sandbox only: no setup wizard, no login (Leuchtturm handles no credentials; the
 # container is published on 127.0.0.1 only).
-FROM jenkins/jenkins:lts-jdk17
+FROM jenkins/jenkins:lts-jdk21
 
 ENV JAVA_OPTS="-Djenkins.install.runSetupWizard=false"
 
-# Pipeline support, downloaded once from the Jenkins update center when the image is built.
+# Basic Pipeline support (scripted pipelines), downloaded once from the Jenkins update center when the image is built.
 COPY jenkins/plugins.txt /usr/share/jenkins/ref/plugins.txt
 RUN jenkins-plugin-cli --plugin-file /usr/share/jenkins/ref/plugins.txt
 

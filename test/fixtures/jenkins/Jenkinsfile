@@ -2,31 +2,25 @@
 // build: build #N produces leuchtturm-demo.jenkins-1.N.0.vsix, named like `vsce package` names
 // files, and archives it with a CHANGELOG.md. A .vsix is a zip file; `jar` (part of the JDK in
 // this image) writes it, so no Node.js is needed.
-pipeline {
-  agent any
-  options { buildDiscarder(logRotator(numToKeepStr: '20')) }
-  stages {
-    stage('Package') {
-      steps {
-        sh '''
-          set -eu
-          VERSION="1.${BUILD_NUMBER}.0"
-          rm -rf vsix dist
-          mkdir -p vsix/extension dist
-          sed "s/__VERSION__/${VERSION}/g" /opt/leuchtturm-demo/package.json > vsix/extension/package.json
-          sed "s/__VERSION__/${VERSION}/g" /opt/leuchtturm-demo/extension.vsixmanifest > vsix/extension.vsixmanifest
-          cp '/opt/leuchtturm-demo/[Content_Types].xml' vsix/
-          cp /opt/leuchtturm-demo/extension.js /opt/leuchtturm-demo/readme.md vsix/extension/
-          (cd vsix && jar --create --no-manifest --file "../dist/leuchtturm-demo.jenkins-${VERSION}.vsix" .)
-          printf '## %s\\n- Built by Jenkins build #%s\\n' "${VERSION}" "${BUILD_NUMBER}" > dist/CHANGELOG.md
-          echo "Packaged leuchtturm-demo.jenkins ${VERSION}"
-        '''
-      }
-    }
-  }
-  post {
-    success {
-      archiveArtifacts artifacts: 'dist/*'
-    }
+//
+// A scripted pipeline: it needs only the basic Pipeline plugins (see plugins.txt). The job keeps
+// its last 20 builds (set in init.groovy.d).
+node {
+  stage('Package') {
+    sh '''
+      set -eu
+      VERSION="1.${BUILD_NUMBER}.0"
+      rm -rf vsix dist
+      mkdir -p vsix/extension dist
+      sed "s/__VERSION__/${VERSION}/g" /opt/leuchtturm-demo/package.json > vsix/extension/package.json
+      sed "s/__VERSION__/${VERSION}/g" /opt/leuchtturm-demo/extension.vsixmanifest > vsix/extension.vsixmanifest
+      cp '/opt/leuchtturm-demo/[Content_Types].xml' vsix/
+      cp /opt/leuchtturm-demo/extension.js /opt/leuchtturm-demo/readme.md vsix/extension/
+      (cd vsix && jar --create --no-manifest --file "../dist/leuchtturm-demo.jenkins-${VERSION}.vsix" .)
+      printf '## %s\\n- Built by Jenkins build #%s\\n' "${VERSION}" "${BUILD_NUMBER}" > dist/CHANGELOG.md
+      echo "Packaged leuchtturm-demo.jenkins ${VERSION}"
+    '''
+    // Only reached when the script succeeded (a failing `sh` ends the build).
+    archiveArtifacts artifacts: 'dist/*'
   }
 }

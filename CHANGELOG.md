@@ -11,6 +11,8 @@ Milestone M6: polish.
   `http.noProxy`, proxy login). Verified by the integration tests, which send all traffic
   through a local proxy.
 - README screenshots, rendered automatically from the demo scenario (`npm run screenshots`).
+- Releases: CI publishes every push to `main` as the pre-release "latest-build" (version
+  99.99.99) and every tag `release/x.y.z` as release x.y.z.
 - Development: `npm run full-sandbox` adds a real Jenkins in Docker whose pipeline builds a new
   version of a demo extension on every "Build Now"; `npm run test:jenkins` tests Leuchtturm
   against it (also in CI).

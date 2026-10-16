@@ -19,7 +19,7 @@ import * as path from 'node:path';
 
 import {
   downloadAndUnzipVSCode,
-  resolveCliArgsFromVSCodeExecutablePath,
+  resolveCliPathFromVSCodeExecutablePath,
 } from '@vscode/test-electron';
 
 import { discover } from '../../sourceEditor/discover';
@@ -71,14 +71,16 @@ async function main(): Promise<void> {
 
     step('VS Code installs it (the .vsix is built with `jar` in the pipeline)');
     const exe = await downloadAndUnzipVSCode();
-    const [cli, ...cliArgs] = resolveCliArgsFromVSCodeExecutablePath(exe);
+    // The CLI path only: our own profile arguments replace test-electron's default profile
+    // (passing both made VS Code warn "Option user-data-dir is defined more than once").
+    const cli = resolveCliPathFromVSCodeExecutablePath(exe);
     const profile = [
       '--user-data-dir',
       path.join(tmp, 'u'),
       '--extensions-dir',
       path.join(tmp, 'e'),
     ];
-    const r = spawnSync(cli!, [...cliArgs, ...profile, '--install-extension', file], {
+    const r = spawnSync(cli, [...profile, '--install-extension', file], {
       encoding: 'utf8',
       shell: process.platform === 'win32',
     });

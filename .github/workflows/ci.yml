@@ -1,9 +1,16 @@
 name: CI
 
+# Every push to main publishes the development build (version 99.99.99) as the pre-release
+# "latest-build", replacing the previous one. A tag `release/x.y.z` builds version x.y.z and
+# publishes it as a GitHub release. Both only after all tests passed.
 on:
   push:
     branches: [main]
+    tags: ['release/*']
   pull_request:
+
+# Linux runners have no D-Bus session; VS Code (Electron) logs errors without one, so the
+# VS Code tests run inside `dbus-run-session` (and `xvfb-run` for a virtual display).
 
 jobs:
   build:
@@ -13,51 +20,101 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
       - run: npm ci
       - run: npm run lint
       - run: npm test
       - name: Integration tests (Linux needs a virtual display)
         if: runner.os == 'Linux'
-        run: xvfb-run -a npm run test:integration
+        run: dbus-run-session -- xvfb-run -a npm run test:integration
       - name: Integration tests
         if: runner.os != 'Linux'
         run: npm run test:integration
       - name: UI test (source editor, Linux only)
         if: runner.os == 'Linux'
-        run: xvfb-run -a npm run test:ui
+        run: dbus-run-session -- xvfb-run -a npm run test:ui
       # Also checks that the README images will show on the extension page.
       - run: npm run package
-      - uses: actions/upload-artifact@v4
-        if: runner.os == 'Linux'
-        with:
-          name: vsix
-          path: '*.vsix'
 
   # Leuchtturm in a real Dev Containers window (Docker is preinstalled on Ubuntu runners).
   remote:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
       - run: npm ci
-      - run: xvfb-run -a npm run test:remote
+      - run: dbus-run-session -- xvfb-run -a npm run test:remote
 
   # Leuchtturm against a real Jenkins in Docker (builds the image with the Pipeline plugins).
   jenkins:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
       - run: npm ci
-      - run: xvfb-run -a npm run test:jenkins
+      - run: dbus-run-session -- xvfb-run -a npm run test:jenkins
+
+  publish:
+    needs: [build, remote, jenkins]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create releases and tags
+    # One publish at a time, so two quick pushes cannot interleave replacing "latest-build".
+    concurrency: publish-${{ github.ref }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Version (release/x.y.z → x.y.z, otherwise 99.99.99 from package.json)
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/release/* ]]; then
+            version="${GITHUB_REF#refs/tags/release/}"
+            if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "::error::Release tags look like release/1.2.3, not release/$version"
+              exit 1
+            fi
+            npm version "$version" --no-git-tag-version --allow-same-version
+          fi
+          echo "version=$(node -p 'require("./package.json").version')" >> "$GITHUB_OUTPUT"
+      - run: npm run package
+      - name: Publish the development build (pre-release "latest-build")
+        if: github.ref == 'refs/heads/main'
+        run: |
+          # Delete and recreate, so the release and its tag point at this commit. The download
+          # link stays the same: .../releases/download/latest-build/leuchtturm-updater-99.99.99.vsix
+          gh release delete latest-build --cleanup-tag --yes || true
+          {
+            echo "Development build of main, replaced on every push. Not a release: it always"
+            echo "reports version 99.99.99, so it counts as newer than every real release."
+            echo
+            echo "Commit: $GITHUB_SHA"
+          } > dev-notes.md
+          gh release create latest-build ./*.vsix --prerelease --target "$GITHUB_SHA" \
+            --title "Development build (main)" --notes-file dev-notes.md
+      - name: Publish the release
+        if: startsWith(github.ref, 'refs/tags/release/')
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # Notes: the CHANGELOG.md section under "## x.y.z …", or GitHub's list of changes without one.
+          awk -v head="## $VERSION" '/^## /{p = index($0, head) == 1; next} p' CHANGELOG.md > notes.md
+          if [[ -s notes.md ]]; then notes=(--notes-file notes.md); else notes=(--generate-notes); fi
+          gh release create "$GITHUB_REF_NAME" ./*.vsix --verify-tag \
+            --title "Leuchtturm Updater $VERSION" "${notes[@]}"

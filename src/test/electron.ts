@@ -8,7 +8,7 @@ import { spawnSync } from 'node:child_process';
 
 import {
   downloadAndUnzipVSCode,
-  resolveCliArgsFromVSCodeExecutablePath,
+  resolveCliPathFromVSCodeExecutablePath,
 } from '@vscode/test-electron';
 import {
   _electron as electron,
@@ -37,9 +37,11 @@ export async function launchWorkbench(
     '--extensions-dir',
     scenario.extensionsDir,
   ];
-  const [cli, ...cliArgs] = resolveCliArgsFromVSCodeExecutablePath(executablePath);
+  // The CLI path only: our own profile arguments replace test-electron's default profile
+  // (passing both made VS Code warn "Option user-data-dir is defined more than once").
+  const cli = resolveCliPathFromVSCodeExecutablePath(executablePath);
   for (const vsix of scenario.preinstall) {
-    spawnSync(cli!, [...cliArgs, ...profile, '--install-extension', vsix], {
+    spawnSync(cli, [...profile, '--install-extension', vsix], {
       shell: process.platform === 'win32',
     });
   }

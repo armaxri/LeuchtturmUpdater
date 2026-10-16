@@ -13,7 +13,7 @@ import * as path from 'node:path';
 
 import {
   downloadAndUnzipVSCode,
-  resolveCliArgsFromVSCodeExecutablePath,
+  resolveCliPathFromVSCodeExecutablePath,
   runTests,
 } from '@vscode/test-electron';
 
@@ -46,9 +46,11 @@ async function main(): Promise<void> {
     ];
 
     const vscodeExecutablePath = await downloadAndUnzipVSCode();
-    const [cli, ...cliArgs] = resolveCliArgsFromVSCodeExecutablePath(vscodeExecutablePath);
+    // The CLI path only: our own profile arguments replace test-electron's default profile
+    // (passing both made VS Code warn "Option user-data-dir is defined more than once").
+    const cli = resolveCliPathFromVSCodeExecutablePath(vscodeExecutablePath);
     for (const vsix of scenario.preinstall) {
-      const r = spawnSync(cli!, [...cliArgs, ...profile, '--install-extension', vsix], {
+      const r = spawnSync(cli, [...profile, '--install-extension', vsix], {
         encoding: 'utf8',
         // The Windows CLI is a .cmd file, which needs a shell.
         shell: process.platform === 'win32',

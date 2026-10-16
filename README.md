@@ -8,6 +8,15 @@ It uses only public VS Code APIs and does not touch VS Code's marketplace config
 
 ![The Leuchtturm view: updates, extensions available to install, and a problem](docs/images/sidebar.png)
 
+## Install
+
+Download `leuchtturm-updater-<version>.vsix` from the
+[releases](https://github.com/armaxri/LeuchtturmUpdater/releases) and install it with
+_Extensions: Install from VSIX…_ (or `code --install-extension <file>`).
+
+The pre-release **Development build (main)** is rebuilt on every change to `main`. It always
+reports version 99.99.99, so VS Code and Leuchtturm treat it as newer than every release.
+
 ## Quick start
 
 1. Open the Leuchtturm view and click **+** (_Add Source…_).
@@ -116,6 +125,16 @@ npm run package           # build the .vsix and check its README images
 at several versions and an old version pre-installed. It then opens a separate VS Code window
 running the development build. `TRY-ME.md` in that window lists what to try. The same scenario
 drives the integration tests (`src/test/scenario.ts`).
+
+### Releases
+
+CI (`.github/workflows/ci.yml`) publishes only after all tests passed:
+
+- every push to `main`: the `.vsix` as version 99.99.99 (the version in `package.json`) in the
+  pre-release `latest-build`, replacing the previous one;
+- a tag `release/x.y.z` (for example `git tag release/1.2.0 && git push origin release/1.2.0`):
+  version x.y.z as a GitHub release. The tag sets the version; the release notes are the
+  `## x.y.z` section of `CHANGELOG.md` (GitHub's list of changes if there is none).
 
 ## License
 
