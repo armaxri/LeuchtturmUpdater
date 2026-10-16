@@ -2,7 +2,7 @@
   "name": "leuchtturm-updater",
   "displayName": "Leuchtturm Updater",
   "description": "Keeps privately distributed VS Code extensions up to date from file shares, npm registries, Jenkins or custom scripts.",
-  "version": "0.5.0",
+  "version": "1.0.0",
   "publisher": "armaxri",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -46,29 +46,29 @@
       },
       {
         "command": "leuchtturm.update",
-        "title": "Update Extension…",
+        "title": "Update Extension\u2026",
         "category": "Leuchtturm"
       },
       {
         "command": "leuchtturm.installVersion",
-        "title": "Install Specific Version…",
+        "title": "Install Specific Version\u2026",
         "category": "Leuchtturm"
       },
       {
         "command": "leuchtturm.testSource",
-        "title": "Test Source…",
+        "title": "Test Source\u2026",
         "category": "Leuchtturm",
         "icon": "$(beaker)"
       },
       {
         "command": "leuchtturm.setSecret",
-        "title": "Store Credential…",
+        "title": "Store Credential\u2026",
         "category": "Leuchtturm",
         "icon": "$(key)"
       },
       {
         "command": "leuchtturm.approveScript",
-        "title": "Allow Script Source…",
+        "title": "Allow Script Source\u2026",
         "category": "Leuchtturm",
         "icon": "$(shield)"
       },
@@ -517,7 +517,7 @@
       {
         "view": "leuchtturm.updates",
         "when": "!leuchtturm.noSources",
-        "contents": "Nothing to show yet. Leuchtturm tracks installed extensions that your sources offer; set \"leuchtturm.trackAllFromSources\" to list everything.\n[Check for Updates](command:leuchtturm.checkNow)\n[Test Source…](command:leuchtturm.testSource)"
+        "contents": "Nothing to show yet. Leuchtturm tracks installed extensions that your sources offer; set \"leuchtturm.trackAllFromSources\" to list everything.\n[Check for Updates](command:leuchtturm.checkNow)\n[Test Source\u2026](command:leuchtturm.testSource)"
       }
     ],
     "menus": {
@@ -642,7 +642,8 @@
     "pretest:integration": "npm run build && tsc -p .",
     "test:integration": "node out/test/integration/runTest.js",
     "package": "vsce package",
-    "sandbox": "npm run build && tsc -p . && node out/test/sandbox.js"
+    "sandbox": "npm run build && tsc -p . && node out/test/sandbox.js",
+    "screenshots": "npm run build && tsc -p . && node out/test/screenshots.js"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -654,6 +655,7 @@
     "esbuild": "^0.28.2",
     "eslint": "^10.12.0",
     "mocha": "^12.0.3",
+    "playwright-core": "^1.64.1",
     "prettier": "^3.9.10",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.71.2",

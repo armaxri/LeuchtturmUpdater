@@ -70,3 +70,20 @@ operating system's keychain), not in `settings.json`. Entering an empty value de
 
 Stored secrets, `Authorization` headers, npm tokens and passwords in URLs are masked in all
 log output.
+
+## Proxies
+
+Leuchtturm has no proxy settings of its own. VS Code routes the network requests of
+extensions through its proxy support, so `http`, `npm` and `script` URL downloads follow the
+same rules as the rest of VS Code:
+
+- `http.proxy`, or else the system proxy configuration (including PAC files),
+- `http.noProxy` for hosts that must be reached directly,
+- `http.proxyStrictSSL` for proxies that intercept TLS,
+- proxy logins: VS Code asks for credentials when the proxy requires them (or uses Kerberos).
+  `http.proxyAuthorization` is **not** applied to extension requests.
+- `http.proxySupport` (default `override`) controls all of this; `off` turns it off for
+  extensions.
+
+The integration tests send all traffic of the demo scenario through a local proxy and use host
+names only that proxy can resolve, so this behaviour is checked on every test run.

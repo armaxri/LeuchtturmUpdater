@@ -14,6 +14,7 @@ import { tempDir } from './helpers';
 
 class FakeTarget implements Target {
   readonly kind = 'vscode-extension' as const;
+  verify?: Target['verify'];
   installed: { path: string; content: string; id: string; version: string }[] = [];
   getInstalledVersion(): string | undefined {
     return undefined;
@@ -113,5 +114,49 @@ describe('Installer', () => {
     await installer.install(source, candidate, NEVER_CANCELLED);
     expect(released).toEqual(['corp.linter']);
     expect(target.installed).toHaveLength(1);
+  });
+
+  it('asks before installing a VSIX from another publisher, and stops if declined', async () => {
+    for (const answer of [false, true]) {
+      const target = new FakeTarget();
+      target.verify = async () => ({ confirm: 'published by someone else' });
+      const questions: string[] = [];
+      const { source, candidate } = setup('x');
+      const installer = new Installer(
+        await tempDir(),
+        target,
+        NULL_LOGGER,
+        undefined,
+        async (q) => {
+          questions.push(q);
+          return answer;
+        },
+      );
+      const result = installer.install(source, candidate, NEVER_CANCELLED);
+      if (answer) {
+        await result;
+        expect(target.installed).toHaveLength(1);
+      } else {
+        await expect(result).rejects.toThrow(/publisher .* does not match/);
+        expect(target.installed).toEqual([]);
+      }
+      expect(questions).toEqual(['published by someone else']);
+    }
+  });
+
+  it('never installs what verification rejects', async () => {
+    const target = new FakeTarget();
+    target.verify = async () => {
+      throw new Error('contains corp.other');
+    };
+    const { source, candidate } = setup('x');
+    await expect(
+      new Installer(await tempDir(), target, NULL_LOGGER).install(
+        source,
+        candidate,
+        NEVER_CANCELLED,
+      ),
+    ).rejects.toThrow(/corp.other/);
+    expect(target.installed).toEqual([]);
   });
 });

@@ -6,9 +6,7 @@ click _Update_. It never installs anything on its own.
 
 It uses only public VS Code APIs and does not touch VS Code's marketplace configuration.
 
-> Status: milestone M5. All four source types (`file`, `http`, `npm`, `script`), the sidebar,
-> the status bar and multi-window scheduling work. Next: polish and v1.0 (VSIX verification,
-> proxy support). See [`docs/SPEC.md`](docs/SPEC.md).
+![The Leuchtturm view: updates, extensions available to install, and a problem](docs/images/sidebar.png)
 
 ## Quick start (file share)
 
@@ -71,9 +69,12 @@ Safeguards and the relation to the VS Code / Marketplace terms: [`docs/security.
 
 Leuchtturm runs on the **local** machine (`extensionKind: ["ui"]`), where file shares and
 internal servers are usually reachable. With Remote-SSH, WSL or Dev Containers, checks and
-downloads still happen locally. The install goes through VS Code's own install command, which
-decides where an extension ends up based on that extension's `extensionKind`. Remote setups
-have not been tested systematically yet; please report problems.
+downloads still happen locally, and the install goes through VS Code's own install command,
+which places an extension according to that extension's `extensionKind`.
+
+Not yet verified in practice: whether extensions installed **only on the remote side** are
+recognised as installed (VS Code may report them only to the remote extension host). If you
+use remote setups, please report what you see.
 
 ## Development
 
@@ -84,6 +85,7 @@ npm test                  # unit tests (vitest)
 npm run test:integration  # end-to-end in a downloaded VS Code
 npm run lint              # eslint + prettier + tsc
 npm run sandbox           # open a demo VS Code window (isolated profile, demo share)
+npm run screenshots       # re-render docs/images/*.png from the demo scenario
 npx vsce package          # build the .vsix
 ```
 

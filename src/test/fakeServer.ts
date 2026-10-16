@@ -17,6 +17,7 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as http from 'node:http';
 import * as https from 'node:https';
+import * as net from 'node:net';
 import type { AddressInfo } from 'node:net';
 import * as path from 'node:path';
 
@@ -247,6 +248,99 @@ export async function startFakeServer(config: FakeServerConfig): Promise<FakeSer
     close: () =>
       new Promise<void>((resolve) => {
         server.closeAllConnections?.();
+        server.close(() => resolve());
+      }),
+  };
+}
+
+export interface FakeProxy {
+  url: string;
+  /** `CONNECT host:port` tunnels and absolute-URI requests seen, in order. */
+  seen: string[];
+  close(): Promise<void>;
+}
+
+/** Host names under this (reserved, never publicly resolvable) domain point to 127.0.0.1. */
+export const PROXY_ONLY_DOMAIN = 'leuchtturm.test';
+
+/** `jenkins` + `http://127.0.0.1:1234` → `http://jenkins.leuchtturm.test:1234` */
+export function proxyOnlyUrl(name: string, url: string): string {
+  return url.replace('127.0.0.1', `${name}.${PROXY_ONLY_DOMAIN}`);
+}
+
+function resolveHost(host: string): string {
+  return host.endsWith(`.${PROXY_ONLY_DOMAIN}`) ? '127.0.0.1' : host;
+}
+
+/**
+ * A forward proxy like a company proxy: tunnels HTTPS with CONNECT, forwards plain HTTP
+ * requests with absolute URIs, and optionally requires `Proxy-Authorization`. It resolves
+ * `*.leuchtturm.test` to 127.0.0.1, so URLs with those names only work through the proxy.
+ * A direct request for `/__seen` returns what it has seen (for tests in another process).
+ */
+export async function startFakeProxy(options: { authorization?: string } = {}): Promise<FakeProxy> {
+  const seen: string[] = [];
+  const denied = (header: string | undefined) =>
+    options.authorization !== undefined && header !== options.authorization;
+  const server = http.createServer((req, res) => {
+    if (req.url === '/__seen') {
+      send(res, 200, JSON.stringify(seen), 'application/json');
+      return;
+    }
+    if (!req.url?.startsWith('http://')) {
+      send(res, 400, 'Not a proxy request');
+      return;
+    }
+    if (denied(req.headers['proxy-authorization'])) {
+      res.writeHead(407, { 'proxy-authenticate': 'Basic realm="proxy"' }).end();
+      return;
+    }
+    seen.push(`GET ${req.url}`);
+    const headers = { ...req.headers };
+    delete headers['proxy-authorization'];
+    const target = new URL(req.url);
+    const upstream = http.request(
+      {
+        host: resolveHost(target.hostname),
+        port: target.port || 80,
+        path: target.pathname + target.search,
+        method: req.method,
+        headers,
+      },
+      (up) => {
+        res.writeHead(up.statusCode ?? 502, up.headers);
+        up.pipe(res);
+      },
+    );
+    upstream.on('error', () => send(res, 502, 'Bad gateway'));
+    req.pipe(upstream);
+  });
+  server.on('connect', (req: http.IncomingMessage, client: net.Socket, head: Buffer) => {
+    if (denied(req.headers['proxy-authorization'])) {
+      client.end(
+        'HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm="proxy"\r\n\r\n',
+      );
+      return;
+    }
+    seen.push(`CONNECT ${req.url}`);
+    const [host, port] = (req.url ?? '').split(':');
+    const upstream = net.connect(Number(port), resolveHost(host ?? ''), () => {
+      client.write('HTTP/1.1 200 Connection Established\r\n\r\n');
+      upstream.write(head);
+      upstream.pipe(client);
+      client.pipe(upstream);
+    });
+    upstream.on('error', () => client.destroy());
+    client.on('error', () => upstream.destroy());
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address() as AddressInfo;
+  return {
+    url: `http://127.0.0.1:${port}`,
+    seen,
+    close: () =>
+      new Promise<void>((resolve) => {
+        server.closeAllConnections();
         server.close(() => resolve());
       }),
   };

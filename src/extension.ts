@@ -53,6 +53,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<Leucht
       acquire: (id) => store.acquireInstall(id, windowId, Date.now(), INSTALL_LEASE_MS),
       release: (id) => store.releaseInstall(id, windowId),
     },
+    async (question) =>
+      (await vscode.window.showWarningMessage(question, { modal: true }, 'Install Anyway')) ===
+      'Install Anyway',
   );
   // Shipped with the extension (schemas/), so scripts and Leuchtturm validate against one file.
   const schema = JSON.parse(

@@ -32,8 +32,9 @@ a download location or turn on scripts.
 - npm downloads are checked against the registry's `dist.integrity` (or `dist.shasum`).
 - Downgrades need a modal confirmation.
 - Every install logs its source and URL.
-- Planned for milestone M6: reading `extension/package.json` from the `.vsix` and checking that
-  publisher, name and version match what was offered.
+- Every `.vsix` is opened before installing: `extension/package.json` must name the offered
+  extension and version, otherwise nothing is installed. A different publisher with the same
+  name needs a modal confirmation.
 
 ## Credentials
 

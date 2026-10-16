@@ -197,7 +197,7 @@ Each package item has a `version` field, so no regex is needed.
 
 ## Limits
 
-- Proxies: `http.proxy` is not applied yet (planned for milestone M6).
+- Proxies are handled by VS Code, see [Proxies](../configuration.md#proxies).
 - Pagination: only the first page of an API response is read. Ask for enough items in the
   index URL (`{0,20}` for Jenkins, `per_page=100` for GitLab).
 

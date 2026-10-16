@@ -1,6 +1,18 @@
 # Changelog
 
-## 0.5.0 (unreleased)
+## 1.0.0 (unreleased)
+
+Milestone M6: polish.
+
+- Every downloaded `.vsix` is opened before installing: `extension/package.json` must name
+  the offered extension and version, or the install is refused. A different publisher alone
+  asks for confirmation. Built-in zip reader, no new dependency.
+- Proxies: requests follow VS Code's proxy support (`http.proxy`, system/PAC proxies,
+  `http.noProxy`, proxy login). Verified by the integration tests, which send all traffic
+  through a local proxy.
+- README screenshots, rendered automatically from the demo scenario (`npm run screenshots`).
+
+## 0.5.0
 
 Milestone M5: script sources.
 
@@ -17,7 +29,7 @@ Milestone M5: script sources.
 - Docs: `docs/sources/script.md` (protocol reference), `docs/security.md`,
   `examples/script/`, `examples/settings/script.jsonc`.
 
-## 0.4.0 (unreleased)
+## 0.4.0
 
 Milestone M4: npm registries.
 
@@ -31,7 +43,7 @@ Milestone M4: npm registries.
 - Docs: `docs/sources/npm.md` with a publishing guide and CI example,
   `examples/npm/package.json`, `examples/npm/publish.sh`, `examples/settings/npm.jsonc`.
 
-## 0.3.0 (unreleased)
+## 0.3.0
 
 Milestone M3: HTTP sources.
 
@@ -45,7 +57,7 @@ Milestone M3: HTTP sources.
 - Extensions without a display name from their source use the installed extension's name.
 - Docs: `docs/sources/http.md`, `docs/configuration.md`, `examples/settings/http.jsonc`.
 
-## 0.2.0 (unreleased)
+## 0.2.0
 
 Milestone M2: visibility.
 
@@ -59,7 +71,7 @@ Milestone M2: visibility.
   extension are locked across windows. Failing sources are retried with exponential back-off.
 - Editing `leuchtturm.sources` re-checks added or changed sources right away.
 
-## 0.1.0 (unreleased)
+## 0.1.0
 
 First milestone (M1).
 

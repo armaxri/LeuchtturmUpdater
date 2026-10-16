@@ -1,5 +1,6 @@
 import * as assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
+import * as http from 'node:http';
 
 import * as vscode from 'vscode';
 
@@ -32,7 +33,16 @@ function describeTree(nodes: readonly Node[]): unknown[] {
   return nodes.map((n) => {
     switch (n.type) {
       case 'group':
-        return { [`${n.group} (${n.count})`]: describeTree(n.children) };
+        // Sorted by ID so the expectation does not depend on display-name collation.
+        return {
+          [`${n.group} (${n.count})`]: describeTree(
+            [...n.children].sort((a, b) =>
+              a.type === 'artifact' && b.type === 'artifact'
+                ? a.artifact.id.localeCompare(b.artifact.id)
+                : 0,
+            ),
+          ),
+        };
       case 'artifact':
         return { [n.artifact.id]: describeTree(n.children) };
       case 'version':
@@ -158,11 +168,13 @@ describe('Leuchtturm end to end (demo scenario, file source)', () => {
         ],
       },
       {
-        'notInstalled (4)': [
+        'notInstalled (6)': [
+          { [IDS.mislabeled]: ['1.0.0'] },
           { [IDS.packed]: ['0.9.0'] },
           { [IDS.tampered]: ['1.0.0'] },
           { [IDS.web]: ['0.3.0'] },
           { [IDS.world]: ['0.5.0'] },
+          { [IDS.impostor]: ['1.0.0'] },
         ],
       },
       { 'problems (3)': state?.problems.map((p) => p.message) },
@@ -225,7 +237,10 @@ describe('Leuchtturm end to end (demo scenario, file source)', () => {
     const report = await vscode.commands.executeCommand<string>('leuchtturm.testSource', 'jenkins');
     assert.match(report, /→ HTTP 200 OK/);
     assert.match(report, /matched {2}leuchtturm-demo\.ci 2\.1\.0/);
-    assert.match(report, /download http:\/\/127\.0\.0\.1:\d+\/job\/demo-ci\/42\/artifact\/dist\//);
+    assert.match(
+      report,
+      /download http:\/\/jenkins\.leuchtturm\.test:\d+\/job\/demo-ci\/42\/artifact\/dist\//,
+    );
     assert.ok(!report.includes(JENKINS_SECRET.value), 'the password must not appear in the log');
   });
 
@@ -314,6 +329,16 @@ describe('Leuchtturm end to end (demo scenario, file source)', () => {
     assert.ok(!(await installedFolders()).some((f) => f.startsWith(IDS.tampered)));
   });
 
+  it('refuses a VSIX whose manifest names another extension', async () => {
+    const installed = await vscode.commands.executeCommand<number>(
+      'leuchtturm.installVersion',
+      IDS.mislabeled,
+      '1.0.0',
+    );
+    assert.equal(installed, 0);
+    assert.ok(!(await installedFolders()).some((f) => f.includes('mislabeled')));
+  });
+
   it('Update All installs every update (and nothing that is not installed)', async () => {
     const installed = await vscode.commands.executeCommand<number>('leuchtturm.updateAll');
     assert.equal(installed, 3);
@@ -328,6 +353,33 @@ describe('Leuchtturm end to end (demo scenario, file source)', () => {
     const a = await api();
     assert.equal(a.badge, undefined);
     assert.equal(a.statusBar?.visible, false);
+  });
+
+  it('sends every request through the configured proxy (http.proxy)', async () => {
+    const proxy = process.env.LEUCHTTURM_IT_PROXY;
+    assert.ok(proxy);
+    // Ask the proxy directly what it has seen (Node's http, not VS Code's patched one).
+    const seen = await new Promise<string[]>((resolve, reject) => {
+      http
+        .get(`${proxy}/__seen`, { agent: new http.Agent() }, (res) => {
+          let body = '';
+          res.on('data', (c: Buffer) => (body += c.toString()));
+          res.on('end', () => resolve(JSON.parse(body) as string[]));
+        })
+        .on('error', reject);
+    });
+    assert.ok(
+      seen.some((l) => l.startsWith('CONNECT web.leuchtturm.test:')),
+      'no HTTPS tunnel (web source)',
+    );
+    assert.ok(
+      seen.some((l) => l.includes('/job/demo-ci/')),
+      'Jenkins requests not proxied',
+    );
+    assert.ok(
+      seen.some((l) => l.includes('/npm/')),
+      'npm requests not proxied',
+    );
   });
 
   it('installs not-installed artifacts from their tree nodes (file, https, npm)', async () => {

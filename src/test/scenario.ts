@@ -8,6 +8,8 @@
  *     leuchtturm-demo.hello-1.2.0-beta.1.vsix    → hidden unless includePrerelease
  *     leuchtturm-demo/leuchtturm-demo.world-0.5.0.vsix    → not installed (publisher layout)
  *     leuchtturm-demo.tampered-1.0.0.vsix (+ wrong .sha256) → install must fail
+ *     leuchtturm-demo.mislabeled-1.0.0.vsix (contains hello) → install must fail (manifest check)
+ *     leuchtturm-impostor.hello-1.0.0.vsix (contains leuchtturm-demo.hello) → needs confirmation
  *   evil-share/leuchtturm-demo.evil-6.6.6.vsix   → only referenced from *workspace* settings;
  *                                                  must never show up
  *   workspace/.vscode/settings.json               → tries to inject the evil source
@@ -32,7 +34,7 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
-import { startFakeServer, type FakeServer } from './fakeServer';
+import { proxyOnlyUrl, startFakeProxy, startFakeServer, type FakeServer } from './fakeServer';
 import { packageFixture, ROOT } from './packageFixture';
 import { TLS_CERT } from './paths';
 import { findPython } from './python';
@@ -50,6 +52,8 @@ export const IDS = {
   registry: 'leuchtturm-demo.registry',
   packed: 'leuchtturm-demo.packed',
   scripted: 'leuchtturm-demo.scripted',
+  mislabeled: 'leuchtturm-demo.mislabeled',
+  impostor: 'leuchtturm-impostor.hello',
 } as const;
 
 /** Token the fake npm registry expects; the scenario writes it into its own `.npmrc`. */
@@ -69,6 +73,8 @@ export interface Scenario {
   jenkinsUrl: string;
   webUrl: string;
   npmUrl: string;
+  /** Company-style proxy that all requests go through (`http.proxy`). */
+  proxyUrl: string;
   /** Python used by the `script` source; undefined if none was found (source omitted). */
   python?: string;
   /** Stops the fake servers. */
@@ -98,6 +104,10 @@ async function demo(name: string, displayName: string, version: string, out: str
   return out;
 }
 
+function omit<T extends object>(names: readonly string[], record: T): T {
+  return Object.fromEntries(Object.entries(record).filter(([k]) => !names.includes(k))) as T;
+}
+
 async function sha256(file: string): Promise<string> {
   return createHash('sha256')
     .update(await fs.readFile(file))
@@ -111,6 +121,8 @@ async function sha256(file: string): Promise<string> {
 export async function buildScenario(
   root: string,
   settings: Record<string, unknown> = {},
+  /** Source names to leave out of the user settings (e.g. for tidy screenshots). */
+  omitSources: readonly string[] = [],
 ): Promise<Scenario> {
   await fs.rm(root, { recursive: true, force: true });
   const share = path.join(root, 'share');
@@ -139,6 +151,10 @@ export async function buildScenario(
     '0.5.0',
     path.join(share, 'leuchtturm-demo', `${IDS.world}-0.5.0.vsix`),
   );
+
+  // File names that lie about their content: the manifest check must catch them.
+  await fs.copyFile(hello('1.0.0'), path.join(share, `${IDS.mislabeled}-1.0.0.vsix`));
+  await fs.copyFile(hello('1.0.0'), path.join(share, `${IDS.impostor}-1.0.0.vsix`));
 
   const tampered = path.join(share, `${IDS.tampered}-1.0.0.vsix`);
   await demo('tampered', 'Leuchtturm Demo Tampered', '1.0.0', tampered);
@@ -226,7 +242,14 @@ export async function buildScenario(
     await startFakeServer({ tls: true, autoindex: { dir: webDir } }),
     await startFakeServer({ npm: { token: NPM_TOKEN, packages: npmPackages } }),
   ];
-  const [jenkins, web, npm] = servers as [FakeServer, FakeServer, FakeServer];
+  const proxy = await startFakeProxy();
+  servers.push(proxy as unknown as FakeServer);
+  // The servers listen on 127.0.0.1, but the sources use names only the proxy can resolve,
+  // so every request must really go through the proxy.
+  const [jenkins, web, npm] = (servers as [FakeServer, FakeServer, FakeServer]).map((s, i) => ({
+    ...s,
+    url: proxyOnlyUrl(['jenkins', 'web', 'npm'][i]!, s.url),
+  })) as [FakeServer, FakeServer, FakeServer];
   // Credentials the npm way, in a scenario-local .npmrc (your own ~/.npmrc is not touched).
   const npmrc = path.join(root, 'npmrc');
   await fs.writeFile(npmrc, `${npm.url.replace(/^https?:/, '')}/npm/:_authToken=${NPM_TOKEN}\n`);
@@ -250,7 +273,7 @@ export async function buildScenario(
   );
 
   const userSettings = {
-    'leuchtturm.sources': {
+    'leuchtturm.sources': omit(omitSources, {
       share: { type: 'file', path: share },
       offline: { type: 'file', path: path.join(root, 'does-not-exist'), timeout: 5 },
       jenkins: {
@@ -295,9 +318,11 @@ export async function buildScenario(
             },
           }
         : {}),
-    },
+    }),
     // Off until the user turns it on in their user settings (the workspace value is ignored).
     'leuchtturm.script.enabled': false,
+    // Like a company network: everything goes through a proxy.
+    'http.proxy': proxy.url,
     'leuchtturm.trackAllFromSources': true,
     'leuchtturm.checkOnStartup': true,
     'leuchtturm.checkInterval': 5,
@@ -328,6 +353,7 @@ export async function buildScenario(
     jenkinsUrl: jenkins.url,
     webUrl: web.url,
     npmUrl: `${npm.url}/npm/`,
+    proxyUrl: proxy.url,
     python,
     close: async () => {
       await Promise.all(servers.map((s) => s.close()));

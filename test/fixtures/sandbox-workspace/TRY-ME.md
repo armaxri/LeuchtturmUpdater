@@ -22,7 +22,10 @@ inside the repository and is rebuilt on every `npm run sandbox`.
 The user settings also contain a source called `offline` that points to a folder that does
 not exist, so a problem shows up.
 
-The fake Jenkins, web server and npm registry run inside the `npm run sandbox` process. Keep it running;
+All network traffic goes through a local fake company proxy (`http.proxy` in the user
+settings), and the servers use `*.leuchtturm.test` names that only that proxy can resolve.
+
+The fake Jenkins, web server, npm registry and proxy run inside the `npm run sandbox` process. Keep it running;
 Ctrl+C stops them (the `jenkins`, `web` and `npm` sources then show up as problems).
 
 The demo extensions show their version in the status bar (bottom right, `$(beaker) hello 1.0.0`).
@@ -54,7 +57,9 @@ a modal dialog.
 7. Expand _Leuchtturm Demo Hello_ and click the download icon on `1.0.0`. You must confirm
    the downgrade in a modal dialog.
 8. Click the download icon on _Leuchtturm Demo Tampered_. It must fail with
-   "SHA-256 mismatch". 🤖
+   "SHA-256 mismatch". 🤖 _leuchtturm-demo.mislabeled_ must fail too: the file contains a
+   different extension. 🤖 _leuchtturm-impostor.hello_ contains the right extension from
+   another publisher: you are asked to confirm in a modal dialog.
 9. Click the download icon on _Leuchtturm Demo Web_: it is downloaded over HTTPS from a
    server with a self-signed certificate, trusted through the `ca` setting. 🤖 Then install
    _Leuchtturm Demo Packed_: the tarball's integrity is checked and the `.vsix` extracted. 🤖

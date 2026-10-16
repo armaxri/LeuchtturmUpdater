@@ -127,7 +127,7 @@ every version that was skipped (not semver, deprecated, no tarball) or failed.
 
 ## Limits
 
-- Proxies: `http.proxy` is not applied yet (planned for milestone M6).
+- Proxies are handled by VS Code, see [Proxies](../configuration.md#proxies).
 - The scope search reads at most 2,500 packages.
 
 More snippets: [`examples/settings/npm.jsonc`](../../examples/settings/npm.jsonc).

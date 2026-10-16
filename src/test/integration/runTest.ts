@@ -66,7 +66,10 @@ async function main(): Promise<void> {
           '--skip-welcome',
           '--skip-release-notes',
         ],
-        extensionTestsEnv: { LEUCHTTURM_IT_EXTENSIONS_DIR: scenario.extensionsDir },
+        extensionTestsEnv: {
+          LEUCHTTURM_IT_EXTENSIONS_DIR: scenario.extensionsDir,
+          LEUCHTTURM_IT_PROXY: scenario.proxyUrl,
+        },
       });
     } finally {
       await scenario.close();

@@ -34,6 +34,8 @@ export class Installer {
     private readonly target: Target,
     private readonly log: Logger,
     private readonly lock: InstallLock = NO_LOCK,
+    /** Asks the user a yes/no question (a modal dialog in VS Code). */
+    private readonly confirm: (question: string) => Promise<boolean> = async () => false,
   ) {}
 
   async install(source: Source, candidate: Candidate, token: CancellationToken): Promise<void> {
@@ -59,6 +61,20 @@ export class Installer {
       if (available.sha256) {
         await verifySha256(file, available.sha256);
         this.log.info(`SHA-256 verified for ${path.basename(file)}`);
+      }
+      const check = await this.target.verify?.(file, id, available.version);
+      if (check?.confirm) {
+        this.log.warn(check.confirm);
+        if (!(await this.confirm(check.confirm))) {
+          throw new Error(
+            `Not installed: the publisher of ${path.basename(file)} does not match ${id}`,
+          );
+        }
+        this.log.info(
+          `User confirmed installing ${path.basename(file)} despite the publisher mismatch`,
+        );
+      } else if (this.target.verify) {
+        this.log.info(`Verified ${path.basename(file)}: contains ${id} ${available.version}`);
       }
       await this.target.install(file, id, available.version);
       this.log.info(`Installed ${id}@${available.version}`);
