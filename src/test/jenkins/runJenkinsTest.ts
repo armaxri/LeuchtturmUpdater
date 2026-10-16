@@ -108,6 +108,15 @@ function expectManifest() {
   };
 }
 
+// 'beforeExit' fires when nothing is left to wait for. If the test has not finished by then, a
+// request was dropped without an error; say so instead of exiting silently with code 1.
+process.once('beforeExit', () => {
+  if (process.exitCode !== 0) {
+    // eslint-disable-next-line no-console
+    console.error('Jenkins test failed: it stopped before finishing (a request never answered).');
+  }
+});
+
 main().catch((err: unknown) => {
   // eslint-disable-next-line no-console
   console.error('Jenkins test failed:', err);

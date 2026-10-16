@@ -102,6 +102,29 @@ async function crumbHeaders(url: string): Promise<Record<string, string>> {
   return { [body.crumbRequestField]: body.crumb, ...(cookie ? { cookie } : {}) };
 }
 
+/**
+ * One "is it up yet?" request. Until Jenkins listens, Docker's port proxy (on Linux) accepts
+ * connections and resets them at once; Node 20's `fetch` then never settles, and a pending
+ * `fetch` does not keep Node running, so the process would just end. The timer does keep Node
+ * running (a pending `setTimeout` is enough), and it gives up on a stuck request.
+ */
+async function isUp(url: string): Promise<boolean> {
+  let timer: NodeJS.Timeout | undefined;
+  const gaveUp = new Promise<boolean>((resolve) => {
+    timer = setTimeout(() => resolve(false), 5000);
+  });
+  try {
+    return await Promise.race([
+      fetch(url)
+        .then((r) => r.ok)
+        .catch(() => false),
+      gaveUp,
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
   if (!res.ok) {
@@ -166,10 +189,7 @@ export async function startJenkins(
     const end = Date.now() + 5 * 60_000;
     for (;;) {
       // 503 "Jenkins is getting ready" until the job exists.
-      const ok = await fetch(`${url}/job/${JENKINS_JOB}/api/json`)
-        .then((r) => r.ok)
-        .catch(() => false);
-      if (ok) {
+      if (await isUp(`${url}/job/${JENKINS_JOB}/api/json`)) {
         break;
       }
       if (Date.now() > end) {
