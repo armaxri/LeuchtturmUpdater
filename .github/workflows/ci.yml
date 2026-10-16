@@ -1,10 +1,12 @@
 name: CI
 
-# Version handling as in action-group-executer: package.json stays at 99.99.99. Every run
-# builds one .vsix (99.99.99, or x.y.z for a tag release/x.y.z), tests it and keeps it as the
-# run's artifact; the publish jobs release exactly that file:
-# - push to main: replaces the pre-release "Development Build" (tag `dev`);
-# - tag release/x.y.z: a GitHub release, notes from the `## [x.y.z]` section of CHANGELOG.md.
+# Version handling as in action-group-executer, but without a `dev` tag: package.json stays at
+# 99.99.99. Every run builds one .vsix (99.99.99, or x.y.z for a tag release/x.y.z), tests it and keeps it as the
+# run's artifact (`vsix`):
+# - push to main: that artifact is the development build; older main builds' artifacts are
+#   deleted, so only the newest exists. No tag, no release.
+# - tag release/x.y.z: that exact file becomes a GitHub release, notes from the `## [x.y.z]`
+#   section of CHANGELOG.md.
 on:
   push:
     branches: ['**']
@@ -113,31 +115,28 @@ jobs:
       - run: npm ci
       - run: dbus-run-session -- xvfb-run -a npm run test:jenkins
 
-  dev-release:
+  # The development build is this run's `vsix` artifact (Actions tab). No tag, no release:
+  # only the newest main build is kept, older main builds' artifacts are deleted.
+  dev-build:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [build, remote, jenkins]
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-    concurrency:
-      group: dev-release
-      cancel-in-progress: true
+      actions: write # delete artifacts
     steps:
-      - uses: actions/download-artifact@v8
-        with:
-          name: vsix
-
-      - name: Replace development release
+      - name: Delete the artifacts of older main builds
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          gh release delete dev --cleanup-tag --yes || true
-          gh release create dev "${{ needs.build.outputs.vsix }}" \
-            --prerelease \
-            --target "$GITHUB_SHA" \
-            --title "Development Build" \
-            --notes "Automated build of \`main\` at ${GITHUB_SHA::7}. Version \`99.99.99\`; replaced on every push to \`main\`."
+          # Only older runs (smaller run ID): a slower, older run must not delete a newer build.
+          gh api --paginate "repos/$GH_REPO/actions/artifacts?name=vsix&per_page=100" \
+            --jq ".artifacts[] | select(.workflow_run.head_branch == \"main\" and .workflow_run.id < $GITHUB_RUN_ID) | .id" |
+            while read -r id; do
+              echo "Deleting artifact $id"
+              gh api -X DELETE "repos/$GH_REPO/actions/artifacts/$id"
+            done
+          echo "Development build: $GITHUB_SERVER_URL/$GH_REPO/actions/runs/$GITHUB_RUN_ID (artifact \"vsix\")" >> "$GITHUB_STEP_SUMMARY"
 
   release:
     if: startsWith(github.ref, 'refs/tags/release/')

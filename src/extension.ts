@@ -272,7 +272,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Leucht
 
   const version = String(context.extension.packageJSON.version);
   log.info(`Leuchtturm Updater ${version} activated`);
-  // 99.99.99 is the development build (CI's "Development Build" pre-release); releases carry
+  // 99.99.99 is the development build (CI's artifact of the newest main build); releases carry
   // the version of their tag. Only for an installed copy: when VS Code runs Leuchtturm from
   // source (tests, sandbox, screenshots) everything is a development build anyway.
   if (version === '99.99.99' && context.extensionMode === vscode.ExtensionMode.Production) {
