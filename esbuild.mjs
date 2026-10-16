@@ -39,6 +39,8 @@ async function buildHelper() {
   await cp('media/icon-128.png', `${stage}/icon.png`);
   // Everything in the staging folder belongs into the package.
   await writeFile(`${stage}/.vscodeignore`, '');
+  // dist/ does not exist yet in a fresh checkout (the main bundle is written afterwards).
+  await mkdir('dist', { recursive: true });
   await createVSIX({
     cwd: stage,
     packagePath: 'dist/leuchtturm-remote-helper.vsix',
