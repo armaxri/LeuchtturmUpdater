@@ -14,8 +14,9 @@ Download `leuchtturm-updater-<version>.vsix` from the
 [releases](https://github.com/armaxri/LeuchtturmUpdater/releases) and install it with
 _Extensions: Install from VSIX…_ (or `code --install-extension <file>`).
 
-The pre-release **Development build (main)** is rebuilt on every change to `main`. It always
-reports version 99.99.99, so VS Code and Leuchtturm treat it as newer than every release.
+The pre-release **Development Build** is rebuilt on every push to `main`. It always reports
+version 99.99.99, so VS Code and Leuchtturm treat it as newer than every release, and it says
+_DEV BUILD loaded_ when it starts.
 
 ## Quick start
 
@@ -128,13 +129,21 @@ drives the integration tests (`src/test/scenario.ts`).
 
 ### Releases
 
-CI (`.github/workflows/ci.yml`) publishes only after all tests passed:
+Versions work as in action-group-executer: `package.json` always says 99.99.99, and CI
+(`.github/workflows/ci.yml`) sets the real version while building. Every run builds and tests
+one `.vsix` and keeps it as the run's artifact; only after all tests pass is that same file
+published:
 
-- every push to `main`: the `.vsix` as version 99.99.99 (the version in `package.json`) in the
-  pre-release `latest-build`, replacing the previous one;
-- a tag `release/x.y.z` (for example `git tag release/1.2.0 && git push origin release/1.2.0`):
-  version x.y.z as a GitHub release. The tag sets the version; the release notes are the
-  `## x.y.z` section of `CHANGELOG.md` (GitHub's list of changes if there is none).
+- every push to `main`: the pre-release **Development Build** (tag `dev`), version 99.99.99,
+  replaced on every push;
+- a lightweight tag `release/x.y.z` (no `-a`, no message): a GitHub release with version
+  x.y.z. Its notes are the `## [x.y.z]` section of `CHANGELOG.md`, so rename `## [Unreleased]`
+  to `## [x.y.z]` first.
+
+```sh
+git tag release/1.2.0
+git push origin release/1.2.0
+```
 
 ## License
 

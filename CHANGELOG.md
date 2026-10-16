@@ -1,26 +1,19 @@
 # Changelog
 
-## 1.0.0 (unreleased)
+## [Unreleased]
 
-Milestone M6: polish.
-
+- Leuchtturm now also runs in untrusted folders (Restricted Mode). VS Code switched it off
+  there before; it reads nothing from the workspace, so trust changes nothing for it.
+- An installed development build (version 99.99.99) says so: _DEV BUILD loaded_.
 - Every downloaded `.vsix` is opened before installing: `extension/package.json` must name
   the offered extension and version, or the install is refused. A different publisher alone
   asks for confirmation. Built-in zip reader, no new dependency.
 - Proxies: requests follow VS Code's proxy support (`http.proxy`, system/PAC proxies,
-  `http.noProxy`, proxy login). Verified by the integration tests, which send all traffic
-  through a local proxy.
-- README screenshots, rendered automatically from the demo scenario (`npm run screenshots`).
-- Releases: CI publishes every push to `main` as the pre-release "latest-build" (version
-  99.99.99) and every tag `release/x.y.z` as release x.y.z.
-- Development: `npm run full-sandbox` adds a real Jenkins in Docker whose pipeline builds a new
-  version of a demo extension on every "Build Now"; `npm run test:jenkins` tests Leuchtturm
-  against it (also in CI).
+  `http.noProxy`, proxy login).
 - **Add Source from a link**: paste where you download the extension (a Jenkins job or its
   "Last Successful Artifacts", a web page with `.vsix` links, a folder, an npm package name);
   Leuchtturm recognises it, shows the extensions and versions it found, and writes the
-  configuration. No regex or JSONPath needed. Tested end to end with Playwright
-  (`npm run test:ui`).
+  configuration. No regex or JSONPath needed.
 - Source editor: **Leuchtturm: Manage Sources** (_Edit Source_ on tree items, a link on the
   Settings page) shows a detailed form per source type, validated with the same rules as the
   checks, with Test on the unsaved form. VS Code's Settings page cannot edit nested objects.
@@ -37,9 +30,9 @@ Milestone M6: polish.
   them from the remote side, so Leuchtturm saw no sources in remote windows.
 - Remote windows: a small helper extension, shipped inside Leuchtturm and installed on click,
   reports the extensions installed on the remote side, which VS Code does not show to local
-  extensions. Tested in a real Dev Containers window (`npm run test:remote`).
+  extensions.
 
-## 0.5.0
+## [0.5.0]
 
 Milestone M5: script sources.
 
@@ -56,7 +49,7 @@ Milestone M5: script sources.
 - Docs: `docs/sources/script.md` (protocol reference), `docs/security.md`,
   `examples/script/`, `examples/settings/script.jsonc`.
 
-## 0.4.0
+## [0.4.0]
 
 Milestone M4: npm registries.
 
@@ -70,7 +63,7 @@ Milestone M4: npm registries.
 - Docs: `docs/sources/npm.md` with a publishing guide and CI example,
   `examples/npm/package.json`, `examples/npm/publish.sh`, `examples/settings/npm.jsonc`.
 
-## 0.3.0
+## [0.3.0]
 
 Milestone M3: HTTP sources.
 
@@ -84,7 +77,7 @@ Milestone M3: HTTP sources.
 - Extensions without a display name from their source use the installed extension's name.
 - Docs: `docs/sources/http.md`, `docs/configuration.md`, `examples/settings/http.jsonc`.
 
-## 0.2.0
+## [0.2.0]
 
 Milestone M2: visibility.
 
@@ -98,7 +91,7 @@ Milestone M2: visibility.
   extension are locked across windows. Failing sources are retried with exponential back-off.
 - Editing `leuchtturm.sources` re-checks added or changed sources right away.
 
-## 0.1.0
+## [0.1.0]
 
 First milestone (M1).
 

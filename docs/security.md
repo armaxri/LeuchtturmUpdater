@@ -16,6 +16,9 @@ SSH host. Leuchtturm additionally reads only the user-level value (`inspect().gl
 cloned repository's `.vscode/settings.json` or a dev container's configuration can therefore not
 add a download location or turn on scripts.
 
+For the same reason Leuchtturm also runs in untrusted folders (Restricted Mode): nothing in a
+folder changes what it checks or installs, so there is nothing for workspace trust to protect.
+
 ## Remote windows
 
 Leuchtturm runs on your local machine, also in Dev Containers, Remote-SSH and WSL windows. To see

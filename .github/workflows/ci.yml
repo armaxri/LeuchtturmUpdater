@@ -1,13 +1,20 @@
 name: CI
 
-# Every push to main publishes the development build (version 99.99.99) as the pre-release
-# "latest-build", replacing the previous one. A tag `release/x.y.z` builds version x.y.z and
-# publishes it as a GitHub release. Both only after all tests passed.
+# Version handling as in action-group-executer: package.json stays at 99.99.99. Every run
+# builds one .vsix (99.99.99, or x.y.z for a tag release/x.y.z), tests it and keeps it as the
+# run's artifact; the publish jobs release exactly that file:
+# - push to main: replaces the pre-release "Development Build" (tag `dev`);
+# - tag release/x.y.z: a GitHub release, notes from the `## [x.y.z]` section of CHANGELOG.md.
 on:
   push:
-    branches: [main]
+    branches: ['**']
     tags: ['release/*']
   pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 # Linux runners have no D-Bus session; VS Code (Electron) logs errors without one, so the
 # VS Code tests run inside `dbus-run-session` (and `xvfb-run` for a virtual display).
@@ -19,6 +26,12 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      vsix: ${{ steps.version.outputs.vsix }}
     steps:
       # actions/checkout runs `git init`; without a default branch name git prints a long hint.
       - run: git config --global init.defaultBranch main
@@ -27,6 +40,22 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      # Before the tests, so they run against the version that gets released.
+      - name: Determine version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/release/* ]]; then
+            version="${GITHUB_REF#refs/tags/release/}"
+            if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "::error::Tag '${GITHUB_REF#refs/tags/}' does not match release/x.y.z"
+              exit 1
+            fi
+          else
+            version="99.99.99"
+          fi
+          npm version "$version" --no-git-tag-version --allow-same-version
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "vsix=leuchtturm-updater-$version.vsix" >> "$GITHUB_OUTPUT"
       - run: npm ci
       - run: npm run lint
       - run: npm test
@@ -40,7 +69,15 @@ jobs:
         if: runner.os == 'Linux'
         run: dbus-run-session -- xvfb-run -a npm run test:ui
       # Also checks that the README images will show on the extension page.
-      - run: npm run package
+      - name: Package
+        run: |
+          npx vsce package -o "${{ steps.version.outputs.vsix }}"
+          npx tsc -p . && node out/test/checkPackage.js "${{ steps.version.outputs.vsix }}"
+      - uses: actions/upload-artifact@v7
+        if: runner.os == 'Linux'
+        with:
+          name: vsix
+          path: ${{ steps.version.outputs.vsix }}
       # On failure: Leuchtturm's log from the integration tests, the UI test's screenshot.
       - uses: actions/upload-artifact@v7
         if: failure()
@@ -54,7 +91,6 @@ jobs:
   remote:
     runs-on: ubuntu-latest
     steps:
-      # actions/checkout runs `git init`; without a default branch name git prints a long hint.
       - run: git config --global init.defaultBranch main
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -68,7 +104,6 @@ jobs:
   jenkins:
     runs-on: ubuntu-latest
     steps:
-      # actions/checkout runs `git init`; without a default branch name git prints a long hint.
       - run: git config --global init.defaultBranch main
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -78,59 +113,66 @@ jobs:
       - run: npm ci
       - run: dbus-run-session -- xvfb-run -a npm run test:jenkins
 
-  publish:
+  dev-release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [build, remote, jenkins]
-    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
-      contents: write # create releases and tags
-    # One publish at a time, so two quick pushes cannot interleave replacing "latest-build".
-    concurrency: publish-${{ github.ref }}
-    env:
-      GH_TOKEN: ${{ github.token }}
+      contents: write
+    concurrency:
+      group: dev-release
+      cancel-in-progress: true
     steps:
-      # actions/checkout runs `git init`; without a default branch name git prints a long hint.
-      - run: git config --global init.defaultBranch main
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/download-artifact@v8
         with:
-          node-version: 24
-          cache: npm
-      - run: npm ci
-      - name: Version (release/x.y.z → x.y.z, otherwise 99.99.99 from package.json)
-        id: version
-        run: |
-          if [[ "$GITHUB_REF" == refs/tags/release/* ]]; then
-            version="${GITHUB_REF#refs/tags/release/}"
-            if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-              echo "::error::Release tags look like release/1.2.3, not release/$version"
-              exit 1
-            fi
-            npm version "$version" --no-git-tag-version --allow-same-version
-          fi
-          echo "version=$(node -p 'require("./package.json").version')" >> "$GITHUB_OUTPUT"
-      - run: npm run package
-      - name: Publish the development build (pre-release "latest-build")
-        if: github.ref == 'refs/heads/main'
-        run: |
-          # Delete and recreate, so the release and its tag point at this commit. The download
-          # link stays the same: .../releases/download/latest-build/leuchtturm-updater-99.99.99.vsix
-          gh release delete latest-build --cleanup-tag --yes || true
-          {
-            echo "Development build of main, replaced on every push. Not a release: it always"
-            echo "reports version 99.99.99, so it counts as newer than every real release."
-            echo
-            echo "Commit: $GITHUB_SHA"
-          } > dev-notes.md
-          gh release create latest-build ./*.vsix --prerelease --target "$GITHUB_SHA" \
-            --title "Development build (main)" --notes-file dev-notes.md
-      - name: Publish the release
-        if: startsWith(github.ref, 'refs/tags/release/')
+          name: vsix
+
+      - name: Replace development release
         env:
-          VERSION: ${{ steps.version.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
-          # Notes: the CHANGELOG.md section under "## x.y.z …", or GitHub's list of changes without one.
-          awk -v head="## $VERSION" '/^## /{p = index($0, head) == 1; next} p' CHANGELOG.md > notes.md
-          if [[ -s notes.md ]]; then notes=(--notes-file notes.md); else notes=(--generate-notes); fi
-          gh release create "$GITHUB_REF_NAME" ./*.vsix --verify-tag \
-            --title "Leuchtturm Updater $VERSION" "${notes[@]}"
+          gh release delete dev --cleanup-tag --yes || true
+          gh release create dev "${{ needs.build.outputs.vsix }}" \
+            --prerelease \
+            --target "$GITHUB_SHA" \
+            --title "Development Build" \
+            --notes "Automated build of \`main\` at ${GITHUB_SHA::7}. Version \`99.99.99\`; replaced on every push to \`main\`."
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/release/')
+    needs: [build, remote, jenkins]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: vsix
+
+      - name: Extract release notes from CHANGELOG
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          awk -v v="$VERSION" '
+            $0 ~ "^## \\[" v "\\]" { f = 1; next }
+            /^## \[/ { f = 0 }
+            f
+          ' CHANGELOG.md > notes.md
+          if ! grep -q '[^[:space:]]' notes.md; then
+            echo "::warning::No CHANGELOG section found for $VERSION"
+            echo "Release $VERSION" > notes.md
+          fi
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release create "${GITHUB_REF#refs/tags/}" "${{ needs.build.outputs.vsix }}" \
+            --verify-tag \
+            --latest \
+            --title "${{ needs.build.outputs.version }}" \
+            --notes-file notes.md

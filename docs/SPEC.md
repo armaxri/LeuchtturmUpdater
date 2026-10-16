@@ -440,6 +440,7 @@ An unknown variable is a configuration error and must not be replaced with an em
 ## 9. Safety and verification
 1. **No automatic installs.** Every install starts from a user action (§1, §3.3).
 2. The `leuchtturm.sources` setting is `application`-scoped (§5). Never read any source from workspace settings.
+2a. Leuchtturm declares `capabilities.untrustedWorkspaces.supported: true`: it reads nothing from the workspace (item 2), so it runs unchanged in Restricted Mode. Without the declaration VS Code disabled it there entirely.
 3. `script` sources need the user-level opt-in `leuchtturm.script.enabled` (§6.5). Without it, scripts are ignored.
 4. Before installing, open the `.vsix` (zip) and read `extension/package.json`. `publisher.name` must equal the expected ID and `version` must equal the expected version. Otherwise abort with a clear error. This is cheap: one zip entry read with `yauzl`/`fflate`, about 30 lines.
 5. If a `sha256` or npm `integrity` is known, verify it.

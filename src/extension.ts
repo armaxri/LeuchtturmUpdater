@@ -270,7 +270,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<Leucht
     { dispose: () => clearTimeout(configTimer) },
   );
 
-  log.info(`Leuchtturm Updater ${String(context.extension.packageJSON.version)} activated`);
+  const version = String(context.extension.packageJSON.version);
+  log.info(`Leuchtturm Updater ${version} activated`);
+  // 99.99.99 is the development build (CI's "Development Build" pre-release); releases carry
+  // the version of their tag. Only for an installed copy: when VS Code runs Leuchtturm from
+  // source (tests, sandbox, screenshots) everything is a development build anyway.
+  if (version === '99.99.99' && context.extensionMode === vscode.ExtensionMode.Production) {
+    log.info('This is a development build (version 99.99.99), not a release');
+    void vscode.window.showInformationMessage('Leuchtturm Updater: DEV BUILD loaded');
+  }
   await controller.loadConfig();
   // Show the last known results right away (possibly checked by another window).
   controller.adoptCache();

@@ -33,8 +33,9 @@ the milestones in §12 of the spec in order, and keep each milestone shippable (
 - `npm run test:jenkins`: Leuchtturm against a real Jenkins in Docker (test/fixtures/jenkins/)
 - `npm run full-sandbox`: the sandbox plus that Jenkins; "Build Now" produces a new demo version
 - `npm run sandbox`: open a demo VS Code window (isolated profile, demo share); `-- --no-launch` only prepares it, `-- --dev-container` opens it inside a dev container
-- Versions: `package.json` stays at 99.99.99 (the development build). Only a tag
-  `release/x.y.z` makes a release; CI sets that version while building (README, "Releases").
+- Versions (as in action-group-executer): `package.json` stays at 99.99.99, the development
+  build. Releases come from a lightweight tag `release/x.y.z` (no `-a`, no message); CI sets
+  the version while building (README, "Releases").
 - `npm run package`: produce the `.vsix` and check that the README images will show (VS Code's extension page only loads public `https` images; vsce points relative links at the public GitHub repo, so images appear once they are pushed)
 
 ## User-friendly testing (sandbox + scenario)
@@ -59,6 +60,12 @@ reachable through `npm run sandbox` without any extra steps.
 - Remote windows are covered the same way: `src/test/devContainer.ts` opens the scenario in a
   Dev Containers window for both `npm run test:remote` and `npm run sandbox -- --dev-container`.
   Run `npm run test:remote` after changes to settings, installing or extension lookups.
+
+## Changelog
+`CHANGELOG.md` uses `## [Unreleased]` and `## [x.y.z]` headings (the release notes are taken
+from the `## [x.y.z]` section). It lists only changes users of the extension notice (features,
+behaviour, bug fixes, settings). No entries for CI, tests, tooling, docs, refactorings or dev
+dependency updates; dependency updates are summarised as one line: `- Updated dependencies.`
 
 ## Assets
 - `media/icon.svg` / `media/icon.png` (256 px): Marketplace and extension icon

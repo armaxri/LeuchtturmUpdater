@@ -13,6 +13,12 @@
   "engines": {
     "vscode": "^1.90.0"
   },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true,
+      "description": "Leuchtturm reads nothing from the workspace: sources and the script switch come from user settings only."
+    }
+  },
   "categories": [
     "Other"
   ],
