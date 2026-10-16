@@ -11,6 +11,9 @@
 !CHANGELOG.md
 !LICENSE
 !docs/**
-!examples/**
+!examples/**/*.py
+!examples/**/*.md
+!examples/**/*.json
+!examples/**/*.jsonc
+!examples/**/*.sh
 !schemas/**
-**/__pycache__/**
