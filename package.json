@@ -46,29 +46,29 @@
       },
       {
         "command": "leuchtturm.update",
-        "title": "Update Extension\u2026",
+        "title": "Update Extension…",
         "category": "Leuchtturm"
       },
       {
         "command": "leuchtturm.installVersion",
-        "title": "Install Specific Version\u2026",
+        "title": "Install Specific Version…",
         "category": "Leuchtturm"
       },
       {
         "command": "leuchtturm.testSource",
-        "title": "Test Source\u2026",
+        "title": "Test Source…",
         "category": "Leuchtturm",
         "icon": "$(beaker)"
       },
       {
         "command": "leuchtturm.setSecret",
-        "title": "Store Credential\u2026",
+        "title": "Store Credential…",
         "category": "Leuchtturm",
         "icon": "$(key)"
       },
       {
         "command": "leuchtturm.approveScript",
-        "title": "Allow Script Source\u2026",
+        "title": "Allow Script Source…",
         "category": "Leuchtturm",
         "icon": "$(shield)"
       },
@@ -517,7 +517,7 @@
       {
         "view": "leuchtturm.updates",
         "when": "!leuchtturm.noSources",
-        "contents": "Nothing to show yet. Leuchtturm tracks installed extensions that your sources offer; set \"leuchtturm.trackAllFromSources\" to list everything.\n[Check for Updates](command:leuchtturm.checkNow)\n[Test Source\u2026](command:leuchtturm.testSource)"
+        "contents": "Nothing to show yet. Leuchtturm tracks installed extensions that your sources offer; set \"leuchtturm.trackAllFromSources\" to list everything.\n[Check for Updates](command:leuchtturm.checkNow)\n[Test Source…](command:leuchtturm.testSource)"
       }
     ],
     "menus": {
@@ -648,7 +648,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/mocha": "^10.0.10",
-    "@types/node": "^18.19.130",
+    "@types/node": "^20.19.43",
     "@types/vscode": "^1.90.0",
     "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "^4.0.0",
